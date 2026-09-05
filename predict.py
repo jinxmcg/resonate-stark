@@ -3,7 +3,8 @@ eval_results_{split}.csv with columns idx, query_id, pred_rank (top-100 node ids
 Reads only the query text and ids of the split; never the answers. Answers are scored once, by
 STaRK's own metrics, in the same run and printed (the committed read) when --score is given.
 Pipeline: retrieve.py ranking (beta, anchors) + text ranking (embedder tag) fused by RRF with the
-weight chosen on train (data/fusion_<tag>.json)."""
+weight chosen on train (data/fusion_<tag>.json); with --rerank, the train-fit listwise reranker
+(rerank.py, P2 lever 1) reorders the fused candidates of every query with relational output."""
 import argparse, json, subprocess, sys, numpy as np, torch
 import stark_shim  # noqa
 from stark_qa import load_qa
@@ -19,19 +20,33 @@ p.add_argument("--rel", required=True, help="relational ranking json for the spl
 p.add_argument("--text", required=True, help="text ranking json for the split (from embed_text2.py)")
 p.add_argument("--w", type=float, required=True, help="fusion weight chosen on train")
 p.add_argument("--score", action="store_true", help="the one committed read: print STaRK metrics")
+p.add_argument("--rerank", default=None, help="data/rerank_<reltag>_<texttag>.json from rerank.py (P2)")
 a = p.parse_args()
 qa = load_qa("prime", human_generated_eval=(a.split == "human_generated_eval"))
 idx = qa.get_idx_split()[a.split].tolist() if a.split != "human_generated_eval" else list(range(len(qa)))
 rel = json.load(open(a.rel)); txt = json.load(open(a.text))
+RR = None
+if a.rerank:
+    from rerank import build
+    RR = json.load(open(a.rerank)); mu, sd = np.array(RR["mu"], np.float32), np.array(RR["sd"], np.float32)
+    d = np.load("data/kg.npz"); N = len(d["node_type"])
+    logdeg = np.log1p(np.bincount(d["h"], minlength=N) + np.bincount(d["t"], minlength=N)).astype(np.float32)
+    feats = build(rel, txt, a.w, logdeg, [int(qa[i][1]) for i in idx])
+    n_rr = 0
 rows, out = [], []
 for i in idx:
     q, qid, ans, _ = qa[i]
     r = rel.get(str(qid), {}); r = r.get("top", []) if isinstance(r, dict) else r
     ranked = fused(r, txt.get(str(qid), []), a.w)[:100]
+    if RR is not None and feats.get(int(qid)) is not None:
+        cands, f = feats[int(qid)]; at = rel[str(qid)]["answer_type"]
+        wv = np.array(RR["w_type"].get(str(at), RR["w_global"]), np.float32)
+        sc = ((f - mu) / sd) @ wv
+        ranked = [cands[j] for j in np.argsort(-sc)][:100]; n_rr += 1
     out.append((i, int(qid), ranked))
     if a.score: rows.append(stark_metrics(ranked, ans))
 with open(f"eval_results_{a.split}.csv", "w") as f:
     f.write("idx,query_id,pred_rank\n")
     for i, qid, ranked in out: f.write(f'{i},{qid},"{ranked}"\n')
-print(f"wrote eval_results_{a.split}.csv with {len(out)} rows")
+print(f"wrote eval_results_{a.split}.csv with {len(out)} rows" + (f", reranked {n_rr}" if RR is not None else ""))
 if a.score: print(f"COMMITTED {a.split}:", {k: round(v, 4) for k, v in summarize(rows).items()})

@@ -1,0 +1,29 @@
+WARNING: faiss must be imported for indexing
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Use file from /workspace/.hf_home/hub/datasets--snap-stanford--stark/snapshots/88269e23e90587f99476c5dd74e235a0877e69be/qa/prime/stark_qa/stark_qa_human_generated_eval.csv.
+text: _bgeft rel: _anc
+train w=0.00 hit1 0.2287 hit5 0.4442 recall20 0.5118 mrr 0.3294
+train w=0.05 hit1 0.2723 hit5 0.4656 recall20 0.5230 mrr 0.3635
+train w=0.10 hit1 0.2855 hit5 0.4846 recall20 0.5341 mrr 0.3794
+train w=0.15 hit1 0.2924 hit5 0.5005 recall20 0.5443 mrr 0.3887
+train w=0.20 hit1 0.2960 hit5 0.5149 recall20 0.5544 mrr 0.3957
+train w=0.25 hit1 0.3019 hit5 0.5230 recall20 0.5669 mrr 0.4021
+train w=0.30 hit1 0.3017 hit5 0.5297 recall20 0.5778 mrr 0.4058
+train w=0.35 hit1 0.3069 hit5 0.5367 recall20 0.5829 mrr 0.4117
+train w=0.40 hit1 0.3061 hit5 0.5385 recall20 0.5843 mrr 0.4130
+train w=0.45 hit1 0.3064 hit5 0.5352 recall20 0.6327 mrr 0.4153
+train w=0.50 hit1 0.2976 hit5 0.5656 recall20 0.6744 mrr 0.4218
+train w=0.55 hit1 0.2980 hit5 0.4989 recall20 0.6228 mrr 0.3979
+train w=0.60 hit1 0.3010 hit5 0.4994 recall20 0.5495 mrr 0.3957
+train w=0.65 hit1 0.3035 hit5 0.4955 recall20 0.5495 mrr 0.3934
+train w=0.70 hit1 0.3010 hit5 0.4860 recall20 0.5460 mrr 0.3873
+train w=0.75 hit1 0.3001 hit5 0.4747 recall20 0.5353 mrr 0.3812
+train w=0.80 hit1 0.2994 hit5 0.4661 recall20 0.5264 mrr 0.3765
+train w=0.85 hit1 0.2954 hit5 0.4515 recall20 0.5159 mrr 0.3697
+train w=0.90 hit1 0.2876 hit5 0.4378 recall20 0.5044 mrr 0.3599
+train w=0.95 hit1 0.2767 hit5 0.4210 recall20 0.4952 mrr 0.3472
+train w=1.00 hit1 0.2502 hit5 0.4075 recall20 0.4878 mrr 0.3256
+chosen on train: w=0.50 ({'hit1': 0.2976306394027913, 'hit5': 0.5655631288542681, 'recall20': 0.6744408115355953, 'mrr': 0.42176165633973967})
+VAL relational only   : hit1 0.2459 hit5 0.4163 recall20 0.5003 mrr 0.3255
+VAL text only         : hit1 0.2245 hit5 0.4266 recall20 0.4892 mrr 0.3173
+VAL fused w=0.50      : hit1 0.2691 hit5 0.5408 recall20 0.6723 mrr 0.3972

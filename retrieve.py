@@ -15,10 +15,10 @@ Evaluated on STaRK `val` only (P1); writes data/rel_val.json with per-query rank
 fusion step can combine them with the text retriever without re-scoring.
 Usage: uv run python retrieve.py --model models/p_k12b4_12k.pt [--split val] [--limit N]
 """
-import argparse, json, re, sys, time, collections
+import os, argparse, json, re, sys, time, collections
 import numpy as np, torch
 import scipy.sparse as sps
-sys.path.insert(0, "/mnt/geocore/resonate")
+sys.path[:0] = ["/mnt/geocore/resonate", os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib")]   # shared modules on jinx, or prime/lib on a rented box
 from resonate_wiki import SparseTableResonatE
 import stark_shim  # noqa
 from stark_qa import load_qa
@@ -176,10 +176,10 @@ class Adjacency:
 
 
 @torch.no_grad()
-def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, adj=None, beta=0.0):
+def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, adj=None, beta=0.0, feats=False):
     at_idx, ments = parsed
     if at is None or not ments:
-        return []
+        return ([], None) if feats else []
     E = model.table()                                    # (N, M) complex
     mask = type_mask[at].clone()
     if exclude is not None:
@@ -206,7 +206,10 @@ def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, a
         total += best
     total = total + beta * exact
     total[~mask] = -1e9
-    top = torch.topk(total, k).indices.tolist()
+    tk = torch.topk(total, k).indices
+    top = tk.tolist()
+    if feats:   # per-candidate parts of the score, for a reranker fit on train: z-score sum and exact-support count
+        return top, {"z": (total[tk] - beta * exact[tk]).tolist(), "exact": exact[tk].tolist()}
     return top
 
 
@@ -220,6 +223,7 @@ def main():
     p.add_argument("--anchor", default=None, help="text-resolve anchors for queries without an exact mention: bge")
     p.add_argument("--anchor-top", type=int, default=2)
     p.add_argument("--anchor-weight", type=float, default=0.7)
+    p.add_argument("--dump-feats", action="store_true", help="also store per-candidate z-sum and exact count (reranker features)")
     a = p.parse_args()
     predict_only = a.split in ("test", "test-0.1", "human_generated_eval")   # committed read: rankings only, no metrics here
     dev = torch.device(a.device)
@@ -237,7 +241,7 @@ def main():
     if a.anchor:
         from sentence_transformers import SentenceTransformer
         emb = torch.from_numpy(np.load(f"data/doc_emb_{a.anchor}.npy").astype(np.float32)).to(dev)
-        st = SentenceTransformer({"bge": "BAAI/bge-base-en-v1.5"}[a.anchor], device=str(dev))
+        st = SentenceTransformer({"bge": "BAAI/bge-base-en-v1.5", "bgeft": "models/bge_ft"}[a.anchor], device=str(dev))
         qpre = "Represent this sentence for searching relevant passages: "
         anchor = (emb, st, qpre)
     qa = load_qa("prime", human_generated_eval=(a.split == "human_generated_eval"))
@@ -270,7 +274,10 @@ def main():
                     ments.append((i_, names[str(i_)].lower(), mt, w))
         neg = parser.negation(q)
         excl = torch.from_numpy(deg[neg] > 0).to(dev) if neg is not None else None
-        top = score_query(model, n_rel, (at, ments), at, type_mask, dev, exclude=excl, adj=adj, beta=a.beta)
+        top = score_query(model, n_rel, (at, ments), at, type_mask, dev, exclude=excl, adj=adj, beta=a.beta, feats=a.dump_feats)
+        fe = None
+        if a.dump_feats:
+            top, fe = top
         if top:
             n_cov += 1
         if not predict_only:
@@ -279,6 +286,8 @@ def main():
             if top:
                 rows_cov.append(m)
         out[int(qid)] = {"top": top[:100], "answer_type": at, "mentions": [(i_, n_, mt) for (i_, n_, mt, w) in ments], "negation": neg}
+        if fe is not None:
+            out[int(qid)]["feats"] = fe
         if j % 500 == 0:
             print(j, round(time.time() - t0), "s", flush=True)
     print(f"{a.split}: n={len(idx)}  answer type found {n_type}  covered (>=1 usable mention) {n_cov} ({n_cov/len(idx):.1%})")

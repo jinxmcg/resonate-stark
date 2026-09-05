@@ -94,3 +94,61 @@ reads below are the first and only ones.) Hit@1 / Hit@5 / R@20 / MRR, %:
 Board top on Synthesized (full), AvaTaR (gpt-4-turbo): 20.1 / 39.9 / 42.2 / 29.2. Paper's Claude-3
 reranker on human queries: 28.6 / 46.9 / 41.6 / 36.3. No LLM anywhere in our pipeline.
 Prediction CSVs (STaRK format) and all logs: prime/results/.
+
+### FROZEN as p1-frozen (local git tag in prime/, FROZEN_P1.md lists every component and flag).
+
+## P2 pre-registration — Hit@1 and human-written queries, without a second look at test (2026-09-05)
+Reads: `train` (fitting), `val` (all development numbers). `test`, `test-0.1`,
+`human_generated_eval`: not loaded during P2; at most one committed read of each at the end,
+which would be the SECOND read of test overall — both reads are reported side by side.
+Levers, each ablated on val:
+ 1. A learned reranker over the fused candidate set, fit on STaRK `train` queries (a split
+    meant for training): per answer type, a listwise logistic regression on [model z-score,
+    exact-support count, number of constraints satisfied, text RRF score, node degree]; the
+    wikikg2 combiner's mechanism, on a split where fitting is allowed.
+ 2. Parser robustness for non-template phrasing, developed BLIND on the synthesized val split
+    (the human set is never opened): answer-type synonyms, more relation keywords, three-hop
+    chains where the type signatures need them, anchor resolution top-3 with a per-type
+    similarity floor, and a relation classifier trained on `train` queries (query text ->
+    relation set) to replace keyword hints.
+ 3. Ranking within the graph-supported set: temperature/calibration of the model score per
+    relation, fit on `train`.
+Bar for the second committed read: fused val Hit@1 >= 30.0 (P1: 26.8) or val MRR >= 40.0
+(P1: 37.3), and no lever kept that does not improve val. Human set: reported from the same
+frozen P2 pipeline, one read, next to P1's 20.4 / 41.8 / 48.6 / 29.9.
+P2 lever 2a (added before any run): fine-tune bge-base-en-v1.5 on STaRK `train` (query ->
+answer node text) pairs with a contrastive (MultipleNegativesRanking) loss, a few epochs on
+the 5090; used for BOTH the text ranking and the anchor resolution; evaluated on val
+text-only, anchor coverage/quality, and fused. Val decides; the human set stays closed.
+
+### P2 progress (2026-09-05, all numbers on `val`; test / test-0.1 / human not opened)
+Lever 2a — finetune_embed.py: bge-base-en-v1.5, MultipleNegativesRankingLoss on `train`
+(query -> answer node text), 2 epochs, 130 s on the 5090; corpus re-embedded (embed_text2.py
+--model bgeft). Fusion weight re-chosen on train (w = 0.50 again).
+  val text only, fine-tuned bge      : 22.5 / 42.7 / 48.9 / 31.7   (Qwen text only: 10.5 / 27.9 / 33.2 / 18.5)
+  val fused, P1 relational (bge anc) : 26.9 / 54.1 / 67.2 / 39.7   (P1 frozen: 26.8 / 49.7 / 58.4 / 37.3)
+  train fused (fit split, for the gap): 29.8 / 56.6 / 67.4 / 42.2
+Hit@1 unchanged; Hit@5 / R@20 / MRR up. Bar (Hit@1 >= 30 or MRR >= 40) not yet met.
+Lever 1 — retrieve.py --dump-feats stores per-candidate z-sum and exact-support count; rerank.py
+fits a listwise logistic regression on the fused candidate set on `train` (global + per answer
+type), reports val. Results below when they land.
+  Fine-tuned anchors (retrieve.py --anchor bgeft), val: relational only 24.4 / 40.3 / 48.6 / 31.8
+  (bge anchors: 24.6 / 41.6 / 50.0 / 32.6); fused with fine-tuned text 26.2 / 53.2 / 66.4 / 39.0
+  (bge anchors: 26.9 / 54.1 / 67.2 / 39.7). Rejected: the query->answer fine-tune points the query
+  at the answer, not at the entity it mentions. P2 pipeline keeps bge for anchors, bgeft for text.
+Lever 1 result (rerank.py, fit on `train` only; features: z-sum, exact count, exact/mentions,
+relational RRF term + flag, text RRF term + flag, log degree, fused RRF score; listwise softmax
+cross-entropy, L2 1e-3; per answer type when >= 100 train groups, else the global fit):
+  val, bge anchors + fine-tuned text:  fused input 26.9 / 54.1 / 67.2 / 39.7
+                                       reranked global   30.8 / 57.5 / 67.4 / 42.9
+                                       reranked per-type 33.7 / 58.8 / 68.0 / 45.1
+  val, fine-tuned anchors (ablation):  reranked per-type 33.1 / 58.5 / 67.6 / 44.6
+predict.py --rerank reproduces the per-type number end to end on val (33.65 / 58.81 / 68.04 / 45.12).
+P2 BAR MET on val (Hit@1 33.7 >= 30, MRR 45.1 >= 40) with levers 2a (text only) + 1.
+P2 pipeline = P1 retrieval (beta 30, bge anchors top-2 w 0.7) + fine-tuned bge text ranking
++ RRF w 0.5 (train) + per-type reranker (train). Levers 2b (relation classifier) and 3 (per-relation
+calibration) NOT yet tried. The second committed read of test / test-0.1 / human has NOT been
+made; it is the user's call whether to spend it now or after 2b / 3.
+Caveat on the fit: the reranker's text features on `train` come from an embedder fine-tuned on
+those same train queries, so the fit sees slightly better text ranks than val does; val is the
+honest number and still improves by 6.8 Hit@1 over the fused input.

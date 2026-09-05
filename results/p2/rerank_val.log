@@ -1,0 +1,32 @@
+== logs/rel_val_ancft.log
+val: n=2241  answer type found 2156  covered (>=1 usable mention) 2156 (96.2%)
+relational-only, all queries (uncovered count as misses): {'hit1': 0.2343, 'hit5': 0.3815, 'recall20': 0.459, 'mrr': 0.3032}
+relational-only, covered queries: {'hit1': 0.2435, 'hit5': 0.3966, 'recall20': 0.4771, 'mrr': 0.3152}
+== logs/fuse_bgeft_ancft.log
+chosen on train: w=0.50 ({'hit1': 0.29130152547874066, 'hit5': 0.5543654657578708, 'recall20': 0.6597743575258942, 'mrr': 0.41326395001002536})
+VAL relational only   : hit1 0.2436 hit5 0.4025 recall20 0.4856 mrr 0.3183
+VAL text only         : hit1 0.2245 hit5 0.4266 recall20 0.4892 mrr 0.3173
+VAL fused w=0.50      : hit1 0.2624 hit5 0.5324 recall20 0.6642 mrr 0.3898
+== logs/fuse_qwen_ancft.log
+chosen on train: w=0.50 ({'hit1': 0.2667964946445959, 'hit5': 0.4764686790003246, 'recall20': 0.5529897964753047, 'mrr': 0.36390053934303046})
+VAL relational only   : hit1 0.2405 hit5 0.3998 recall20 0.4797 mrr 0.3151
+VAL text only         : hit1 0.0892 hit5 0.2477 recall20 0.3035 mrr 0.1663
+VAL fused w=0.50      : hit1 0.2633 hit5 0.4873 recall20 0.5719 mrr 0.3662
+== logs/rel_val_ancf.log
+val: n=2241  answer type found 2156  covered (>=1 usable mention) 2156 (96.2%)
+relational-only, all queries (uncovered count as misses): {'hit1': 0.2365, 'hit5': 0.3954, 'recall20': 0.4737, 'mrr': 0.3104}
+relational-only, covered queries: {'hit1': 0.2458, 'hit5': 0.4109, 'recall20': 0.4924, 'mrr': 0.3227}
+== rerank ancft/bgeft
+train groups with a reachable answer: 5323 / 5939 covered
+global weights: {'z': 0.403, 'exact': -0.225, 'exact/nm': 1.011, 'rel_rrf': 0.252, 'in_rel': -1.481, 'txt_rrf': 0.923, 'in_txt': -0.976, 'logdeg': 0.285, 'fused': 0.841}
+VAL fused (input)   : {'hit1': 0.2624, 'hit5': 0.5324, 'recall20': 0.6642, 'mrr': 0.3898}
+VAL reranked global  : {'hit1': 0.3017, 'hit5': 0.577, 'recall20': 0.6678, 'mrr': 0.4242}
+VAL reranked per-type: {'hit1': 0.3307, 'hit5': 0.585, 'recall20': 0.6755, 'mrr': 0.4456}
+== rerank ancf/bgeft
+train groups with a reachable answer: 5420 / 5939 covered
+global weights: {'z': 0.348, 'exact': -0.205, 'exact/nm': 0.994, 'rel_rrf': 0.282, 'in_rel': -1.437, 'txt_rrf': 0.922, 'in_txt': -0.998, 'logdeg': 0.296, 'fused': 0.842}
+VAL fused (input)   : {'hit1': 0.2691, 'hit5': 0.5408, 'recall20': 0.6723, 'mrr': 0.3972}
+VAL reranked global  : {'hit1': 0.3075, 'hit5': 0.5752, 'recall20': 0.6741, 'mrr': 0.429}
+VAL reranked per-type: {'hit1': 0.3365, 'hit5': 0.5881, 'recall20': 0.6804, 'mrr': 0.4512}
+
+[exited with code 0]
