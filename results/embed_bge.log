@@ -1,0 +1,8 @@
+WARNING: faiss must be imported for indexing
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 8357.78it/s]
+bge docs embedded (129375, 768) 94 s
+Use file from /workspace/.hf_home/hub/datasets--snap-stanford--stark/snapshots/88269e23e90587f99476c5dd74e235a0877e69be/qa/prime/stark_qa/stark_qa_human_generated_eval.csv.
+bge text-only train: {'hit1': 0.111, 'hit5': 0.2777, 'recall20': 0.3274, 'mrr': 0.1898}
+bge text-only val: {'hit1': 0.1049, 'hit5': 0.2789, 'recall20': 0.3324, 'mrr': 0.1853}
+TEXT_DONE

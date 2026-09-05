@@ -1,0 +1,12 @@
+WARNING: faiss must be imported for indexing
+Loading from /root/.cache/huggingface/hub/datasets--snap-stanford--stark/snapshots/88269e23e90587f99476c5dd74e235a0877e69be/skb/prime/processed!
+Use file from /root/.cache/huggingface/hub/datasets--snap-stanford--stark/snapshots/88269e23e90587f99476c5dd74e235a0877e69be/qa/prime/stark_qa/stark_qa_human_generated_eval.csv.
+0
+20000
+40000
+60000
+80000
+100000
+120000
+edges 8100498 nodes 129375 rels 18 splits {'train': 6162, 'val': 2241, 'test': 2801, 'test-0.1': 280} in 9 s
+BUILD_DONE

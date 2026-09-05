@@ -1,0 +1,24 @@
+[project]
+name = "resonate-prime"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "torch==2.6.0",          # GTX 1080 Ti (sm_61) + driver 550: last build that works
+    "numpy>=1.26",
+    "scipy>=1.12",
+    "stark-qa",
+    "sentence-transformers",
+    "rank-bm25",
+    "pytdc==0.3.6",
+]
+
+[tool.uv]
+package = false
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu124" }

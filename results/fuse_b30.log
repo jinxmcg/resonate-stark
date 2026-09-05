@@ -1,0 +1,29 @@
+WARNING: faiss must be imported for indexing
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Use file from /workspace/.hf_home/hub/datasets--snap-stanford--stark/snapshots/88269e23e90587f99476c5dd74e235a0877e69be/qa/prime/stark_qa/stark_qa_human_generated_eval.csv.
+train w=0.00 hit1 0.0820 hit5 0.1912 recall20 0.2318 mrr 0.1365
+train w=0.05 hit1 0.1073 hit5 0.2032 recall20 0.2391 mrr 0.1569
+train w=0.10 hit1 0.1196 hit5 0.2199 recall20 0.2470 mrr 0.1705
+train w=0.15 hit1 0.1326 hit5 0.2363 recall20 0.2554 mrr 0.1836
+train w=0.20 hit1 0.1425 hit5 0.2494 recall20 0.2643 mrr 0.1947
+train w=0.25 hit1 0.1495 hit5 0.2600 recall20 0.2736 mrr 0.2029
+train w=0.30 hit1 0.1571 hit5 0.2702 recall20 0.2821 mrr 0.2137
+train w=0.35 hit1 0.1628 hit5 0.2788 recall20 0.2874 mrr 0.2221
+train w=0.40 hit1 0.1655 hit5 0.2866 recall20 0.2889 mrr 0.2291
+train w=0.45 hit1 0.1678 hit5 0.2894 recall20 0.4381 mrr 0.2382
+train w=0.50 hit1 0.2491 hit5 0.4434 recall20 0.5119 mrr 0.3389
+train w=0.55 hit1 0.2519 hit5 0.4258 recall20 0.5154 mrr 0.3360
+train w=0.60 hit1 0.2558 hit5 0.4260 recall20 0.4893 mrr 0.3370
+train w=0.65 hit1 0.2571 hit5 0.4250 recall20 0.4884 mrr 0.3364
+train w=0.70 hit1 0.2580 hit5 0.4229 recall20 0.4859 mrr 0.3351
+train w=0.75 hit1 0.2574 hit5 0.4187 recall20 0.4807 mrr 0.3326
+train w=0.80 hit1 0.2580 hit5 0.4124 recall20 0.4766 mrr 0.3313
+train w=0.85 hit1 0.2569 hit5 0.4062 recall20 0.4717 mrr 0.3280
+train w=0.90 hit1 0.2514 hit5 0.3995 recall20 0.4663 mrr 0.3224
+train w=0.95 hit1 0.2473 hit5 0.3888 recall20 0.4614 mrr 0.3163
+train w=1.00 hit1 0.2355 hit5 0.3814 recall20 0.4574 mrr 0.3058
+chosen on train: w=0.50 ({'hit1': 0.24910743265173646, 'hit5': 0.44336254462836744, 'recall20': 0.511870560698887, 'mrr': 0.33888915602046593})
+VAL relational only   : hit1 0.2365 hit5 0.3887 recall20 0.4659 mrr 0.3081
+VAL text only         : hit1 0.0785 hit5 0.1896 recall20 0.2188 mrr 0.1325
+VAL fused w=0.50      : hit1 0.2338 hit5 0.4413 recall20 0.5240 mrr 0.3313
+FINAL_DONE

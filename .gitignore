@@ -1,0 +1,10 @@
+.venv/
+data/*.npz
+data/*.npy
+data/docs.jsonl
+data/text_*.json
+data/rel_*.json
+models/
+logs/
+uv.lock
+__pycache__/

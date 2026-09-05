@@ -1,0 +1,3 @@
+WARNING: faiss must be imported for indexing
+usage: predict.py [-h] [--text-tag TEXT_TAG] [--rel-tag REL_TAG]
+predict.py: error: unrecognized arguments: --split test-0.1 --w 0.5 --score

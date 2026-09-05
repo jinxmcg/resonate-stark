@@ -1,0 +1,20 @@
+WARNING: faiss must be imported for indexing
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 9419.76it/s]
+Use file from /workspace/.hf_home/hub/datasets--snap-stanford--stark/snapshots/88269e23e90587f99476c5dd74e235a0877e69be/qa/prime/stark_qa/stark_qa_human_generated_eval.csv.
+0 0 s
+500 17 s
+1000 33 s
+1500 49 s
+2000 65 s
+2500 81 s
+3000 97 s
+3500 113 s
+4000 129 s
+4500 144 s
+5000 160 s
+5500 175 s
+6000 191 s
+train: n=6162  answer type found 5939  covered (>=1 usable mention) 5939 (96.4%)
+relational-only, all queries (uncovered count as misses): {'hit1': 0.2394, 'hit5': 0.3859, 'recall20': 0.4619, 'mrr': 0.3096}
+relational-only, covered queries: {'hit1': 0.2484, 'hit5': 0.4004, 'recall20': 0.4792, 'mrr': 0.3212}

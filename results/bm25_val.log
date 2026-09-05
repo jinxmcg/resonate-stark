@@ -1,0 +1,11 @@
+WARNING: faiss must be imported for indexing
+bm25 built 5 s
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Use file from /workspace/.hf_home/hub/datasets--snap-stanford--stark/snapshots/88269e23e90587f99476c5dd74e235a0877e69be/qa/prime/stark_qa/stark_qa_human_generated_eval.csv.
+0 1 s
+500 349 s
+1000 701 s
+1500 1074 s
+2000 1445 s
+BM25 val: {'hit1': 0.137, 'hit5': 0.2713, 'recall20': 0.3043, 'mrr': 0.2009} n 2241
+val queries with >=1 exact node-name mention (>=6 chars): 1881 / 2241

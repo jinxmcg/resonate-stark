@@ -1,0 +1,10 @@
+WARNING: faiss must be imported for indexing
+Use file from /root/.cache/huggingface/hub/datasets--snap-stanford--stark/snapshots/88269e23e90587f99476c5dd74e235a0877e69be/qa/prime/stark_qa/stark_qa_human_generated_eval.csv.
+qa loaded 11204 in 3 s
+{'train': 6162, 'val': 2241, 'test': 2801, 'test-0.1': 280}
+Extracting downloaded processed data to /root/.cache/huggingface/hub/datasets--snap-stanford--stark/snapshots/88269e23e90587f99476c5dd74e235a0877e69be/skb/prime
+Loading from /root/.cache/huggingface/hub/datasets--snap-stanford--stark/snapshots/88269e23e90587f99476c5dd74e235a0877e69be/skb/prime/processed!
+skb loaded in 8 s
+num_nodes 129375
+attrs ['META_DATA', 'NODE_TYPES', 'RELATION_TYPES', 'candidate_ids', 'candidate_types', 'edge_index', 'edge_type2id', 'edge_type_dict', 'edge_types', 'get_all_paths', 'get_candidate_ids', 'get_doc_info', 'get_edge_ids_by_type', 'get_edge_type_by_id', 'get_neighbor_nodes', 'get_node_ids_by_type', 'get_node_ids_by_value', 'get_node_type_by_id', 'get_rel_info', 'get_tuples', 'is_rel_type', 'k_hop_neighbor', 'kg_path', 'meta_path', 'node_attr_dict', 'node_info', 'node_type2id', 'node_type_dict', 'node_type_lst', 'node_types', 'num_candidates', 'num_edges', 'num_nodes', 'processed_data_dir', 'raw_data_dir', 'rel_type_lst', 'root', 'sample_paths', 'sparse_adj', 'sparse_adj_by_type']
+LOAD_DONE
