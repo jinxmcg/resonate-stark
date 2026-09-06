@@ -289,3 +289,20 @@ they rank the same candidates differently and the sum is what works. The reranke
 (the candidate list is already model-ordered), not through the raw z feature. The 43% of val
 queries with no graph-reachable answer are parser failures (wrong entity / type / relation) — both
 paths score ~0 there; text ranking and the reranker recover some of them.
+
+## Lever 5 pre-registration (2026-09-06, before any run) — one table for edges and questions
+Question: can the entity table be trained on graph edges AND natural-language questions at once,
+so that a question is answered by the same readout as a graph query, without losing link quality?
+joint_train.py: start from models/p_k12b4_50k.pt (table + operators); each step = one edge batch
+(train_prime.py loss: CE over 4096 uniform negatives + lam 0.1 hop-consistency, 2048 edges) + one
+question batch (32 questions incl. paraphrases; z_q = cnorm(head(bge_ft2(q))); softmax over all
+entities with multiple positives). Adam: table 1e-3, operators 1e-4, encoder 2e-5, head 1e-3;
+3 question epochs (~1155 steps). Table and operators trainable in both losses.
+Measured, all on val / held-out edges:
+  (a) held-out link MRR (500 uniform negatives, same seed as train_prime.py) for: base table
+      (P1 logged 0.557 mean), the questions-only joint table (t2lj), and the edges+questions table;
+  (b) text-to-latent QA on plain and paraphrased val (all entities; parser-typed) for t2lj vs joint;
+  (c) the P2 relational retrieval (retrieve.py, LLM override, beta 30, bge anchors) with the joint
+      table vs the base table (24.9 Hit@1) — does the walk+model path keep working on the new table.
+Success = link MRR within 0.02 of base AND QA >= t2lj (26.2 / 25.4). Reads: train, val, held-out
+edges. test / test-0.1 / human closed.

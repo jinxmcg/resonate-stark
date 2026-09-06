@@ -6,7 +6,7 @@ Usage: uv run python train_prime.py --k 12 --block-size 4 --steps 12500 --save m
 """
 import argparse, sys, time, json
 import numpy as np, torch, torch.nn.functional as F
-sys.path.insert(0, "/mnt/geocore/resonate")          # shared modules: resonate.py, resonate_wiki.py, rowadagrad.py
+sys.path[:0] = ["/mnt/geocore/resonate", __import__("os").path.join(__import__("os").path.dirname(__import__("os").path.abspath(__file__)), "lib")]
 from resonate_wiki import SparseTableResonatE, score_batch, clip_grad_norm_
 from rowadagrad import RowAdagrad
 
