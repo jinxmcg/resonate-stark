@@ -65,7 +65,8 @@ def main():
     d = np.load("data/kg.npz"); names = json.load(open("data/names.json")); node_type = d["node_type"]
     dicts = json.load(open("data/dicts.json")); tn = {int(k): v for k, v in dicts["node_type_dict"].items()}; ktype = {v: k for k, v in tn.items()}
     sigs = json.load(open("data/signatures.json")); parser = Parser(names, node_type, tn, sigs)
-    qa = load_qa("prime"); sp = qa.get_idx_split()
+    human = (a.predict == "human_generated_eval")
+    qa = load_qa("prime", human_generated_eval=human); sp = qa.get_idx_split() if not human else None
     tok = AutoTokenizer.from_pretrained(a.encoder)
     if a.train:
         adj = Adjacency(d, n_rel, len(node_type))
@@ -126,7 +127,8 @@ def main():
     ck = torch.load(f"models/{a.tag}.pt", map_location="cpu", weights_only=False)
     net = LP(a.encoder, E.shape[1], len(tn), 2 * n_rel, ck["kanc"]).to(dev); net.load_state_dict(ck["state"]); net.eval()
     floor = a.sim_floor if a.sim_floor is not None else ck["sim_floor"]
-    idx = sp[a.predict].tolist(); QS = json.load(open(a.queries)) if a.queries else {}; out = {}
+    idx = sp[a.predict].tolist() if not human else list(range(len(qa))); QS = json.load(open(a.queries)) if a.queries else {}; out = {}
+    assert not (QS and a.predict not in ("train", "val")), "paraphrases are a development tool: train/val only"
     if a.fold and a.predict == "train":                                    # parse only the held-out fold
         Kf, kf = (int(x) for x in a.fold.split(":")); idx = [i for pos, i in enumerate(idx) if pos % Kf == kf]
     with torch.no_grad():

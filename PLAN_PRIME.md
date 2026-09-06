@@ -423,3 +423,19 @@ Hit@5 and Recall@20 are unchanged. On the graph path alone the latent parser was
 pipeline the 7B parse's extra entity names (text-anchored per name) still buy ~2 points of Hit@1.
 Two honest pipelines, the user picks: max score (with the 7B) or no-LLM-at-query-time (-2 Hit@1).
 Pulled to jinx: models/lp*.pt, data/lparse_*, data/rel_*lp*, logs. Box 50038767 left running.
+
+## P2 committed read — pre-registration (2026-09-06, before the run)
+Decision (user): the paper reports both pipelines; the SUBMISSION is the no-LLM pipeline (latent
+parser). This is the SECOND read of test / test-0.1 overall and the second of human_generated_eval;
+P1's read (28.7 / 28.2 / 20.4 Hit@1) is reported next to it. Nothing is tuned after this read.
+Pipeline (frozen; models/lp.pt, models/p_joint*.{pt,_enc}, models/bge_ft2, models/p_k12b4_50k.pt,
+data/rerank_lp_ancf_bgeft2_pjoint_aug_oof.json, RRF w 0.45), per split S in {test, test-0.1,
+human_generated_eval}, reading only the split's question text and ids:
+  1. latent_parser.py --predict S --tag lp                       -> data/lparse_S.json
+  2. retrieve.py --split S --beta 30 --anchor bge --dump-feats --lparse data/lparse_S.json -> data/rel_S_lp_ancf.json
+  3. embed_text2.py --model bgeft2 --reuse-docs --splits S       -> data/text_S_bgeft2.json
+  4. t2l_rank.py --tag p_joint_head --model models/p_joint.pt --split S -> data/text_S_pjoint.json
+  5. predict.py --split S --rel ... --text ... --t2l ... --w 0.45 --rerank ... --score   (the read)
+Dry run of the identical command sequence on val first (expected 41.3 / 67.3 / 75.3 / 53.1).
+Splits read: test, test-0.1, human_generated_eval (questions + ids for prediction; answers only
+inside predict.py --score). Expected from val and the proxy: synthesized ~41-43 Hit@1, human ~33-37.
