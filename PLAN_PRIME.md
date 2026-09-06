@@ -581,3 +581,27 @@ plus a count. Next (lever 10, not yet pre-registered in detail): TRAIN the joint
 conjunctive queries (2-3 anchors + chains, answers = exact intersections from the training graph)
 with a soft-AND readout in the loss; judge the geometry on a synthetic exact-AND set (no parser
 noise) and on val with the same parse; add a "is this a constraint" head to the parser.
+
+## Lever 10 pre-registration (2026-09-06, before any run) — train the AND
+Hypothesis: a table trained on conjunctive queries with a soft-AND readout can intersect in the space;
+lever 9's failure was a query-time AND on a single-hop-trained table plus noisy parsed constraints.
+Data (conj_sample.py, TRAIN edges only): conjunctions of 2 or 3 constraints (anchor a_i, chain c_i
+from the type signatures, 1- or 2-hop) with a common answer type; answers = exact intersection of
+the walks, kept if 1 <= |intersection| <= 50 and every single constraint's set is > 2x larger than
+the intersection (so the AND matters). 60k train conjunctions, 2k held-out conjunctions (disjoint
+anchors) as a SYNTHETIC exact-AND validation set with no parser in the loop.
+Model (and_train.py): start from models/p_joint.pt (edges + questions); each step = one edge batch
+(train_prime loss) + one conjunction batch (per constraint z_i = model.out(hop(E[a_i], c_i)),
+s_i(t) = Re<z_i, E_t>*exp(tau); combined = -T * logsumexp(-s_i / T) over constraints (soft-AND, T=1);
+softmax over all entities with the intersection as positives) + one question batch (as joint_train,
+to keep the language readout); table and operators trainable; 3000 steps, batch 256 conjunctions.
+Measured:
+  (a) synthetic exact-AND val (2k): Hit@1 / R@20 / MRR for base table {sum, min, softmin} and the
+      AND-trained table {sum, min, softmin}; the exact walk is the ceiling (1.0 by construction);
+  (b) STaRK val, model only (beta 0), same LLM-override parse + bge anchors: AND-trained table with
+      sum / min / softmin vs base-table sum 19.0 and walk-only 18.9 (plain; paraphrased too);
+  (c) held-out link MRR before / after (must stay within 0.01 of 0.568); QA readout re-fit frozen.
+Prediction, written first: (a) will improve a lot (the geometry can learn caps: >= 0.5 Hit@1 with
+softmin vs < 0.2 for the base table); (b) will improve little or not at all with min, because the
+parsed constraints stay noisy — if (b) beats 19.0 with softmin the constraint noise is smaller
+than lever 9 suggested. Reads: train edges/questions, val, held-out edges. Test / human closed.
