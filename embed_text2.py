@@ -11,11 +11,14 @@ MODELS = {
     "minilm": ("sentence-transformers/all-MiniLM-L6-v2", "", "", {}),
     "bge": ("BAAI/bge-base-en-v1.5", "Represent this sentence for searching relevant passages: ", "", {}),
     "bgeft": ("models/bge_ft", "Represent this sentence for searching relevant passages: ", "", {}),
+    "bgeft2": ("models/bge_ft2", "Represent this sentence for searching relevant passages: ", "", {}),   # plain + paraphrased train
     "qwen": ("Qwen/Qwen3-Embedding-0.6B", "Instruct: Given a biomedical question, retrieve the knowledge-base entries that answer it\nQuery: ", "", {"trust_remote_code": True}),
 }
 p = argparse.ArgumentParser(); p.add_argument("--model", default="bge"); p.add_argument("--max-len", type=int, default=512)
 p.add_argument("--splits", default="train,val", help="train,val for development; test,test-0.1,human_generated_eval for the committed prediction only (no metrics)")
 p.add_argument("--reuse-docs", action="store_true")
+p.add_argument("--queries", default=None, help="json {query_id: text} replacing the question text (paraphrase proxy; train/val only)")
+p.add_argument("--tag", default="", help="suffix for the output file name")
 a = p.parse_args(); name, qpre, dpre, kw = MODELS[a.model]
 dev = "cuda" if torch.cuda.is_available() else "cpu"
 m = SentenceTransformer(name, device=dev, **kw); m.max_seq_length = a.max_len
@@ -31,11 +34,13 @@ for split in a.splits.split(","):
     qa = load_qa("prime", human_generated_eval=(split == "human_generated_eval")); sp = qa.get_idx_split()
     idx = sp[split].tolist() if split != "human_generated_eval" else list(range(len(qa))); rows, out = [], {}
     dev_split = split in ("train", "val")
-    Q = m.encode([qpre + qa[i][0] for i in idx], batch_size=128, convert_to_numpy=True, normalize_embeddings=True, show_progress_bar=False)
+    QS = json.load(open(a.queries)) if a.queries else None
+    assert QS is None or dev_split
+    Q = m.encode([qpre + (QS.get(str(int(qa[i][1])), qa[i][0]) if QS else qa[i][0]) for i in idx], batch_size=128, convert_to_numpy=True, normalize_embeddings=True, show_progress_bar=False)
     top = torch.topk(torch.from_numpy(Q).to(dev) @ Dt.t(), 100, dim=1).indices.cpu().numpy()
     for j, i in enumerate(idx):
         q, qid, ans, _ = qa[i]; out[int(qid)] = top[j].tolist()
         if dev_split: rows.append(stark_metrics(top[j].tolist(), ans))
     if dev_split: print(f"{a.model} text-only {split}:", {k: round(v, 4) for k, v in summarize(rows).items()}, flush=True)
-    json.dump(out, open(f"data/text_{split}_{a.model}.json", "w"))
+    json.dump(out, open(f"data/text_{split}_{a.model}{a.tag}.json", "w"))
 print("TEXT_DONE")

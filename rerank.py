@@ -61,6 +61,10 @@ def fit(groups, dev, steps=400, lr=0.05, l2=1e-3, init=None):
 def main():
     p = argparse.ArgumentParser(); p.add_argument("--rel-tag", required=True); p.add_argument("--text-tag", required=True)
     p.add_argument("--device", default="cuda"); p.add_argument("--min-group", type=int, default=100); p.add_argument("--l2", type=float, default=1e-3)
+    p.add_argument("--drop", default="", help="ablation: comma-separated feature names to zero out (z,exact,exact/nm,rel_rrf,in_rel,txt_rrf,in_txt,logdeg,fused)")
+    p.add_argument("--no-save", action="store_true")
+    p.add_argument("--aug-rel-tag", default=None, help="extra train groups from paraphrased train: data/rel_train_<tag>.json")
+    p.add_argument("--aug-text-tag", default=None, help="... and data/text_train_<tag>.json")
     a = p.parse_args(); dev = torch.device(a.device)
     qa = load_qa("prime"); sp = qa.get_idx_split()
     rel = {s: json.load(open(f"data/rel_{s}_{a.rel_tag}.json")) for s in ("train", "val")}
@@ -70,6 +74,18 @@ def main():
     logdeg = np.log1p(np.bincount(d["h"], minlength=N) + np.bincount(d["t"], minlength=N)).astype(np.float32)
     info = {s: {int(qa[i][1]): (qa[i][2], i) for i in sp[s].tolist()} for s in ("train", "val")}
     B = {s: build(rel[s], txt[s], w_rrf, logdeg, list(info[s].keys())) for s in ("train", "val")}
+    if a.aug_rel_tag:
+        arel = json.load(open(f"data/rel_train_{a.aug_rel_tag}.json")); atxt = json.load(open(f"data/text_train_{a.aug_text_tag}.json"))
+        aug = build(arel, atxt, w_rrf, logdeg, list(info["train"].keys()))
+        B["train"] = {**B["train"], **{-qid: v for qid, v in aug.items()}}      # negative keys: paraphrased copies
+        rel["train"] = {**rel["train"], **{str(-int(k)): v for k, v in arel.items()}}
+        info["train"] = {**info["train"], **{-qid: v for qid, v in info["train"].items()}}
+        print("augmented with paraphrased train:", sum(v is not None for v in aug.values()), "groups")
+    names = ["z", "exact", "exact/nm", "rel_rrf", "in_rel", "txt_rrf", "in_txt", "logdeg", "fused"]
+    drop = [names.index(x) for x in a.drop.split(",") if x]
+    for D in B.values():
+        for v in D.values():
+            if v is not None: v[1][:, drop] = 0.0
     allf = np.concatenate([v[1] for v in B["train"].values() if v is not None]); mu, sd = allf.mean(0), allf.std(0) + 1e-6
     gtr = []
     for qid, v in B["train"].items():
@@ -80,7 +96,6 @@ def main():
         gtr.append((rel["train"][str(qid)]["answer_type"], (f - mu) / sd, y))
     print(f"train groups with a reachable answer: {len(gtr)} / {sum(v is not None for v in B['train'].values())} covered")
     w_g = fit([(x, y) for _, x, y in gtr], dev, l2=a.l2)
-    names = ["z", "exact", "exact/nm", "rel_rrf", "in_rel", "txt_rrf", "in_txt", "logdeg", "fused"]
     print("global weights:", {n: round(float(x), 3) for n, x in zip(names, w_g)})
     w_t = {}
     for t in sorted(set(at for at, _, _ in gtr)):
@@ -101,6 +116,7 @@ def main():
         if tag == "global":
             print("VAL fused (input)   :", {k: round(v, 4) for k, v in summarize(rows_base).items()})
         print(f"VAL reranked {tag:8s}:", {k: round(v, 4) for k, v in summarize(rows_rr).items()})
+    if a.no_save: return
     json.dump({"mu": mu.tolist(), "sd": sd.tolist(), "w_global": w_g.tolist(), "w_type": {str(k): v.tolist() for k, v in w_t.items()},
                "w_rrf": w_rrf, "rel_tag": a.rel_tag, "text_tag": a.text_tag}, open(f"data/rerank_{a.rel_tag}_{a.text_tag}.json", "w"))
 

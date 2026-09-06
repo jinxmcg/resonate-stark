@@ -152,3 +152,29 @@ made; it is the user's call whether to spend it now or after 2b / 3.
 Caveat on the fit: the reranker's text features on `train` come from an embedder fine-tuned on
 those same train queries, so the fit sees slightly better text ranks than val does; val is the
 honest number and still improves by 6.8 Hit@1 over the fused input.
+Ablation (val, per-type reranker, bge anchors + fine-tuned text): dropping the ResonatE z-score
+feature from the reranker gives 33.65 / 58.63 / 68.09 / 45.01 vs 33.65 / 58.81 / 68.04 / 45.12 with
+it. Once exact traversal and the text ranker are present, the learned vector score adds no ordering
+information on this benchmark (it still produces the candidate list). Further drops (exact, all
+relational input, text) pending.
+Lever 2c (added 2026-09-06, before any run): language normalisation. The human split differs from
+the synthesized ones only in phrasing; the facts are the same graph. (a) Proxy human set: a local
+instruction model (Qwen2.5-7B-Instruct on the 5090) paraphrases `val` questions into natural,
+varied phrasing (no graph information given to it); the P2 pipeline is measured on the paraphrases
+vs plain val, and the gap is the parser's phrasing sensitivity. (b) LLM parser: the same local
+model, prompted with the PrimeKG schema (10 node types, 18 relations) and few-shot examples from
+`train`, maps a question to {answer type, entity mentions, relation hints}; downstream unchanged.
+Kept only if it improves paraphrased val without hurting plain val. Human set stays closed.
+Lever 2c(a) result — proxy human set (paraphrase.py, Qwen2.5-7B-Instruct, val, 137 s; samples in
+logs/p2/para_val.log; parser coverage 94.2% vs 96.2% on plain val):
+                              plain val                 paraphrased val
+  relational only (P1 path)   24.6 / 41.6 / 50.0 / 32.6   19.3 / 34.4 / 42.1 / 26.4
+  fine-tuned text only        22.5 / 42.7 / 48.9 / 31.7   19.4 / 39.3 / 46.1 / 28.7
+  P1 pipeline (Qwen text)     26.8 / 49.7 / 58.4 / 37.3   22.5 / 46.1 / 54.3 / 33.3
+  P2 without reranker         26.9 / 54.1 / 67.2 / 39.7   24.9 / 49.8 / 62.0 / 36.6
+  P2 full                     33.7 / 58.8 / 68.0 / 45.1   30.0 / 53.1 / 63.3 / 41.0
+The proxy tracks the real human gap in direction and size (P1: -4.3 Hit@1 on paraphrases, -8.3 on
+the 98 real human queries). Under P2 the paraphrase cost is -3.6 Hit@1; both halves of the pipeline
+lose about 5 Hit@1 to phrasing. Next: paraphrased `train` as augmentation (embedder + reranker fit
+on plain + paraphrased train), then the LLM parser (2c(b)); measured on plain and paraphrased val.
+Ablation (cont.): dropping exact traversal from the reranker: 30.8 / 56.0 / 67.9 / 42.5.

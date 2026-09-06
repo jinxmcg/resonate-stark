@@ -123,22 +123,32 @@ class Parser:
                 break
         return found
 
-    def parse(self, q):
-        at = self.answer_type(q)
+    def chain_weights(self, mt, at, q, rel_hints=(), scale=1.0):
+        """operator chains (mention type -> answer type) with keyword / hint weights"""
+        ops = self.ops.get((mt, at), set()) if at else set()
+        w = {}
+        for r, d in ops:
+            hit = bool(re.search(K.get(r, r"$^"), q.lower())) or r in rel_hints
+            w[((r, d),)] = scale * (2.0 if hit else 1.0)
+        if not ops and at:
+            for (op1, op2) in self.ops2.get((mt, at), ()):
+                hits = sum(bool(re.search(K.get(op[0], r"$^"), q.lower())) or op[0] in rel_hints for op in (op1, op2))
+                w[(op1, op2)] = scale * (1.0 + 0.5 * hits)
+        return w
+
+    def parse(self, q, at=None, rel_hints=(), extra_names=()):
+        at = at or self.answer_type(q)
         ments = self.mentions(q)
+        seen = {n for n, _ in ments}
+        for n in extra_names:                          # names proposed by the LLM parser, exact lookup
+            n = n.strip().lower()
+            if n in self.by_name and n not in seen:
+                ments.append((n, self.by_name[n])); seen.add(n)
         out = []
         for n, ids in ments:
             for i in ids[:3]:
                 mt = self.tn[int(self.node_type[i])]
-                ops = self.ops.get((mt, at), set()) if at else set()
-                w = {}
-                for r, d in ops:
-                    hit = bool(re.search(K.get(r, r"$^"), q.lower()))
-                    w[((r, d),)] = 2.0 if hit else 1.0
-                if not ops and at:
-                    for (op1, op2) in self.ops2.get((mt, at), ()):
-                        hits = sum(bool(re.search(K.get(op[0], r"$^"), q.lower())) for op in (op1, op2))
-                        w[(op1, op2)] = 1.0 + 0.5 * hits
+                w = self.chain_weights(mt, at, q, rel_hints)
                 if not w:
                     continue
                 out.append((i, n, mt, w))
@@ -223,6 +233,9 @@ def main():
     p.add_argument("--anchor", default=None, help="text-resolve anchors for queries without an exact mention: bge")
     p.add_argument("--anchor-top", type=int, default=2)
     p.add_argument("--anchor-weight", type=float, default=0.7)
+    p.add_argument("--queries", default=None, help="json {query_id: text} replacing the question text (paraphrase proxy; train/val only)")
+    p.add_argument("--llm-parse", default=None, help="data/llmparse_<tag>.json from llm_parse.py: answer type fallback, relation hints, entity names, exclusion")
+    p.add_argument("--llm-override-type", action="store_true", help="let the LLM answer type override the pattern one (default: fallback only)")
     p.add_argument("--dump-feats", action="store_true", help="also store per-candidate z-sum and exact count (reranker features)")
     a = p.parse_args()
     predict_only = a.split in ("test", "test-0.1", "human_generated_eval")   # committed read: rankings only, no metrics here
@@ -247,11 +260,40 @@ def main():
     qa = load_qa("prime", human_generated_eval=(a.split == "human_generated_eval"))
     idx = qa.get_idx_split()[a.split].tolist() if a.split != "human_generated_eval" else list(range(len(qa)))
     if a.limit: idx = idx[:a.limit]
+    QS = json.load(open(a.queries)) if a.queries else None
+    assert QS is None or not predict_only
+    LP = json.load(open(a.llm_parse)) if a.llm_parse else None
+    rel_ids = {v: int(k) for k, v in dicts["edge_type_dict"].items()}
+    type_ok = set(tn.values()); n_llm_type = n_llm_ent = 0
     rows_all, rows_cov, out, n_cov, n_type, t0 = [], [], {}, 0, 0, time.time()
     for j, i in enumerate(idx):
         q, qid, ans, _ = qa[i]
-        at, ments = parser.parse(q)
+        if QS is not None: q = QS.get(str(int(qid)), q)
+        lp = (LP or {}).get(str(int(qid))) or {}
+        l_at = lp.get("answer_type") if lp.get("answer_type") in type_ok else None
+        l_rels = {rel_ids[r] for r in (lp.get("relations") or []) if isinstance(r, str) and r in rel_ids}
+        l_ents = [e for e in (lp.get("entities") or []) if isinstance(e, dict) and isinstance(e.get("name"), str)]
+        at0 = parser.answer_type(q)
+        at_use = (l_at or at0) if a.llm_override_type else (at0 or l_at)
+        n_llm_type += (at0 is None and l_at is not None)
+        at, ments = parser.parse(q, at=at_use, rel_hints=l_rels, extra_names=[e["name"] for e in l_ents])
         n_type += at is not None
+        if anchor is not None and at is not None and not ments and l_ents:      # resolve the LLM's entity names by text, per name
+            emb, st, qpre = anchor
+            found = {n_ for _, n_, _, _ in ments}
+            for e in l_ents:
+                et = e.get("type") if e.get("type") in type_ok else None
+                qv = torch.from_numpy(st.encode([qpre + e["name"]], convert_to_numpy=True, normalize_embeddings=True)).to(dev)[0]
+                sims = emb @ qv
+                ok = torch.zeros_like(sims, dtype=torch.bool)
+                for mt_name in parser.ktype:
+                    if (et is None or mt_name == et) and (parser.ops.get((mt_name, at)) or parser.ops2.get((mt_name, at))):
+                        ok |= type_mask[mt_name]
+                sims[~ok] = -1e9
+                i_ = int(torch.argmax(sims)); mt = tn[int(node_type[i_])]
+                w = parser.chain_weights(mt, at, q, l_rels, scale=a.anchor_weight)
+                if w and float(sims[i_]) > -1e8:
+                    ments.append((i_, names[str(i_)].lower(), mt, w)); n_llm_ent += 1
         if anchor is not None and at is not None and not ments:
             emb, st, qpre = anchor
             qv = torch.from_numpy(st.encode([qpre + q], convert_to_numpy=True, normalize_embeddings=True)).to(dev)[0]
@@ -273,6 +315,8 @@ def main():
                 if w:
                     ments.append((i_, names[str(i_)].lower(), mt, w))
         neg = parser.negation(q)
+        if neg is None and lp.get("exclude_relation") in rel_ids:
+            neg = rel_ids[lp["exclude_relation"]]
         excl = torch.from_numpy(deg[neg] > 0).to(dev) if neg is not None else None
         top = score_query(model, n_rel, (at, ments), at, type_mask, dev, exclude=excl, adj=adj, beta=a.beta, feats=a.dump_feats)
         fe = None
@@ -290,7 +334,7 @@ def main():
             out[int(qid)]["feats"] = fe
         if j % 500 == 0:
             print(j, round(time.time() - t0), "s", flush=True)
-    print(f"{a.split}: n={len(idx)}  answer type found {n_type}  covered (>=1 usable mention) {n_cov} ({n_cov/len(idx):.1%})")
+    print(f"{a.split}: n={len(idx)}  answer type found {n_type}  covered (>=1 usable mention) {n_cov} ({n_cov/len(idx):.1%})" + (f"  LLM: type fallback used {n_llm_type}, entity anchors {n_llm_ent}" if LP else ""))
     if rows_all:
         print("relational-only, all queries (uncovered count as misses):", {k: round(v, 4) for k, v in summarize(rows_all).items()})
     if rows_cov:
