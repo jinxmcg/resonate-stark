@@ -69,13 +69,17 @@ def load_model(path, dev):
 
 
 class Parser:
-    def __init__(self, names, node_type, type_names, sigs, min_len=4):
+    def __init__(self, names, node_type, type_names, sigs, min_len=4, short_symbols=True):
         self.node_type = node_type; self.tn = type_names
         self.by_name = collections.defaultdict(list)
+        self.by_symbol = collections.defaultdict(list)      # P3 fix: 2-3 character gene/protein symbols (GCK, TTR, ...) — matched only by the uppercase-symbol rule
+        gene_t = {i for i, t in type_names.items() if t == "gene/protein"}
         for i, n in names.items():
             n = n.strip().lower()
             if len(n) >= min_len and not n.isdigit():
                 self.by_name[n].append(int(i))
+            elif short_symbols and 2 <= len(n) < min_len and n.isalnum() and not n.isdigit() and int(node_type[int(i)]) in gene_t:
+                self.by_symbol[n].append(int(i))
         self.names_sorted = sorted(self.by_name, key=len, reverse=True)
         # (mention type, answer type) -> set of (rel, direction)   direction 0: mention --r--> answer
         self.ops = collections.defaultdict(set)
@@ -107,10 +111,12 @@ class Parser:
     def mentions(self, q):
         ql = " " + q.lower() + " "
         found, used = [], []
-        for m in re.finditer(r"(?<![A-Za-z0-9])([A-Z][A-Z0-9]{2,7})(?![A-Za-z0-9])", q):   # gene symbols like HGD, TP53
+        for m in re.finditer(r"(?<![A-Za-z0-9])([A-Z][A-Z0-9]{1,7})(?![A-Za-z0-9])", q):   # gene symbols like HGD, TP53, GCK
             n = m.group(1).lower()
             if n in self.by_name and all(self.node_type[i] == self.ktype["gene/protein"] for i in self.by_name[n][:1]):
                 found.append((n, self.by_name[n])); used.append((m.start() + 1, m.end() + 1))
+            elif n in self.by_symbol:
+                found.append((n, self.by_symbol[n])); used.append((m.start() + 1, m.end() + 1))
         for n in self.names_sorted:
             if len(n) < 4 or n not in ql:
                 continue
@@ -251,6 +257,7 @@ def main():
     p.add_argument("--lparse", default=None, help="latent parser output (latent_parser.py): answer type, anchor ids, operator ids per query; replaces the regex/LLM parse (exact-name mentions kept as fallback)")
     p.add_argument("--agg", default="sum", choices=["sum", "min", "softmin", "logsig", "count"], help="how mention scores combine: sum (OR-ish) or an AND readout")
     p.add_argument("--agg-p", type=float, default=1.0, help="tau for softmin, c for logsig")
+    p.add_argument("--legacy-names", action="store_true", help="P1/P2 behaviour: no 2-3 character gene symbols (reproduces the committed reads)")
     p.add_argument("--no-model", action="store_true", help="ablation: drop the ResonatE score entirely; rank by exact-support count only (ties by node degree)")
     p.add_argument("--llm-override-type", action="store_true", help="let the LLM answer type override the pattern one (default: fallback only)")
     p.add_argument("--dump-feats", action="store_true", help="also store per-candidate z-sum and exact count (reranker features)")
@@ -261,7 +268,7 @@ def main():
     names = json.load(open("data/names.json")); d = np.load("data/kg.npz"); node_type = d["node_type"]
     dicts = json.load(open("data/dicts.json")); tn = {int(k): v for k, v in dicts["node_type_dict"].items()}
     sigs = json.load(open("data/signatures.json"))
-    parser = Parser(names, node_type, tn, sigs)
+    parser = Parser(names, node_type, tn, sigs, short_symbols=not a.legacy_names)
     if a.no_2hop:
         parser.ops2 = {}
     type_mask = {t: torch.from_numpy(node_type == i).to(dev) for i, t in tn.items()}

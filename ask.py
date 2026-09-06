@@ -70,7 +70,7 @@ class Ask:
 
     def show(self, q, k=8):
         r = self.ask(q, k)
-        print(f"\n$ ask \"{q}\"")
+        print(f"\n$ uv run python ask.py \"{q}\"")
         print(f"  read: answer type = {r['answer_type']} · anchors = " + (", ".join(f"{n} ({mt})" for _, n, mt in r["anchors"]) or "none") + " · relation hints = " + (", ".join(r["relations"]) or "none"))
         for i, (c, n, ty, ok) in enumerate(r["ranked"], 1):
             print(f"  {i:>2}  {'[ok]' if ok else '[--]'}  {n}  ({ty})")

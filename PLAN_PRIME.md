@@ -623,3 +623,24 @@ Post-read note (2026-09-06, ask.py demo): Parser.by_name skips names shorter tha
 match; the gene-symbol regex finds them but the lookup fails. Found while building the CLI demo,
 AFTER the committed read. Left unchanged in the submitted pipeline (frozen); to be fixed in any
 future P3, with the expected effect measured on val first.
+
+## P3 pre-registration (2026-09-06, before any run) — one bug fix, then a third read
+Bug (found building ask.py, after the second read): Parser.by_name drops names shorter than four
+characters, so 2-3 character gene/protein symbols (GCK, TTR, ...) are never anchored by exact match,
+although the uppercase-symbol regex finds them. Fix: a separate by_symbol dictionary for 2-3
+character gene/protein names, used only through the uppercase-symbol rule (retrieve.py; the old
+behaviour is kept behind --legacy-names so the P1/P2 reads stay reproducible). NOTHING ELSE changes.
+Plan: (1) count how many val questions mention such a symbol; (2) relational path on val, fixed vs
+frozen (25.1 / 22.7 plain / paraphrased with the latent parser + bge fallback); (3) if it helps,
+rebuild the latent-parser weak labels and folds, the train/val retrievals and the reranker with the
+fix, score val plain / paraphrased; (4) one committed read of test / test-0.1 / human_generated_eval
+— the THIRD read of the test splits overall, reported next to the first two. Bar: val Hit@1 not
+below P2's 41.3 (a fix must not hurt) and a gain on the questions that mention a short symbol.
+Reads: train (fitting), val (all decisions). Test / human closed until step 4.
+P3 step 1-2 results (jinx, GTX 1080 Ti): 95 / 2,241 val questions (4.2%) and 203 / 6,162 train
+questions mention a 2-3 character gene symbol; 663 such symbols in the graph. Relational path on
+val with the fix (latent parser + bge fallback, beta 30), fixed vs frozen:
+  plain        26.1 / 43.2 / 51.4 / 34.0   vs  25.1 / 42.2 / 50.4 / 33.0   (+1.0 Hit@1)
+  paraphrased  23.5 / 39.8 / 48.2 / 31.1   vs  22.7 / 38.8 / 47.1 / 30.3   (+0.8 Hit@1)
+Helps, hurts nothing. Step 3 launched on jinx: weak labels rebuilt, latent parser + 5 folds retrained,
+train/val retrievals, reranker refit, val scoring (scripts/lp_chain.sh then scripts/lp_pipe_chain.sh).
