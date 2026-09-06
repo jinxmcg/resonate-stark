@@ -210,3 +210,15 @@ then per-name text anchoring when nothing else resolved), exclusion relation.
 Coverage 96.2% -> 100.0% (plain), 94.2% -> 99.8% (paraphrased). Override mode kept: +0.9 Hit@1 on
 both, +0.9 / +1.3 MRR; the paraphrase gap is unchanged (~3.7 Hit@1), so the LLM parser adds
 coverage rather than phrasing robustness. Reranker here is the plain-train fit on bgeft features.
+Lever 4 result, stage 1 (text2latent.py, table frozen, bge_ft2 encoder + linear head into M=144
+complex dims, 3 epochs on 12,324 train questions incl. paraphrases, 105 s; loss 7.96 -> 4.38 -> 2.94,
+still falling):
+                                  plain val                    paraphrased val
+  text-to-latent alone            19.6 / 30.9 / 31.3 / 25.2      19.0 / 29.9 / 30.6 / 24.5
+  fine-tuned text alone (2a)      22.5 / 42.7 / 48.9 / 31.7      19.4 / 39.3 / 46.1 / 28.7
+  relational path alone           24.6 / 41.6 / 50.0 / 32.6      19.3 / 34.4 / 42.1 / 26.4
+Phrasing gap 0.6 Hit@1 (vs 3.1 for the text ranker and 5.3 for the parser path): the first
+component that is robust to wording, because the question enters the model. Recall@20 is low
+(31 vs 49): the frozen table's geometry limits what a single query vector can reach. Next: joint
+run (table unfrozen), a longer frozen run (10 epochs), and text-to-latent as a third candidate
+source + reranker feature.

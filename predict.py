@@ -21,6 +21,7 @@ p.add_argument("--text", required=True, help="text ranking json for the split (f
 p.add_argument("--w", type=float, required=True, help="fusion weight chosen on train")
 p.add_argument("--score", action="store_true", help="the one committed read: print STaRK metrics")
 p.add_argument("--rerank", default=None, help="data/rerank_<reltag>_<texttag>.json from rerank.py (P2)")
+p.add_argument("--t2l", default=None, help="text-to-latent ranking json for the split (third candidate source, needs a reranker fit with --t2l-tag)")
 a = p.parse_args()
 qa = load_qa("prime", human_generated_eval=(a.split == "human_generated_eval"))
 idx = qa.get_idx_split()[a.split].tolist() if a.split != "human_generated_eval" else list(range(len(qa)))
@@ -31,7 +32,8 @@ if a.rerank:
     RR = json.load(open(a.rerank)); mu, sd = np.array(RR["mu"], np.float32), np.array(RR["sd"], np.float32)
     d = np.load("data/kg.npz"); N = len(d["node_type"])
     logdeg = np.log1p(np.bincount(d["h"], minlength=N) + np.bincount(d["t"], minlength=N)).astype(np.float32)
-    feats = build(rel, txt, a.w, logdeg, [int(qa[i][1]) for i in idx])
+    T2L = json.load(open(a.t2l)) if a.t2l else None
+    feats = build(rel, txt, a.w, logdeg, [int(qa[i][1]) for i in idx], T2L)
     n_rr = 0
 rows, out = [], []
 for i in idx:

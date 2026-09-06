@@ -21,8 +21,12 @@ def fused(rel, txt, w, k0=60):
     return [c for c, _ in sorted(s.items(), key=lambda x: -x[1])], s
 
 
-def build(rel, txt, w, logdeg, qids):
-    """-> {qid: (cands, feats (n,9)) } for queries with relational output; others -> None."""
+NF = 11
+
+
+def build(rel, txt, w, logdeg, qids, t2l=None):
+    """-> {qid: (cands, feats (n,NF)) } for queries with relational output; others -> None.
+    t2l: optional third ranking (text-to-latent top-100): its candidates join the set, two features."""
     out = {}
     for qid in qids:
         r = rel.get(str(qid)); t = txt.get(str(qid), [])
@@ -30,16 +34,19 @@ def build(rel, txt, w, logdeg, qids):
             out[qid] = None; continue
         top = r["top"]; z = r["feats"]["z"]; ex = r["feats"]["exact"]
         cands, fs = fused(top, t, w)
-        rpos = {c: i for i, c in enumerate(top)}; tpos = {c: i for i, c in enumerate(t)}
+        u = (t2l or {}).get(str(qid), [])
+        seen = set(cands); cands = cands + [c for c in u if c not in seen]
+        rpos = {c: i for i, c in enumerate(top)}; tpos = {c: i for i, c in enumerate(t)}; upos = {c: i for i, c in enumerate(u)}
         nm = len(r.get("mentions", [])) or 1
-        f = np.zeros((len(cands), 9), np.float32)
+        f = np.zeros((len(cands), NF), np.float32)
         for j, c in enumerate(cands):
-            ri = rpos.get(c); ti = tpos.get(c)
+            ri = rpos.get(c); ti = tpos.get(c); ui = upos.get(c)
             f[j] = [z[ri] if ri is not None else 0.0, ex[ri] if ri is not None else 0.0,
                     (ex[ri] / nm) if ri is not None else 0.0,
                     1.0 / (60 + ri + 1) if ri is not None else 0.0, 1.0 if ri is not None else 0.0,
                     1.0 / (60 + ti + 1) if ti is not None else 0.0, 1.0 if ti is not None else 0.0,
-                    logdeg[c], fs[c]]
+                    logdeg[c], fs.get(c, 0.0),
+                    1.0 / (60 + ui + 1) if ui is not None else 0.0, 1.0 if ui is not None else 0.0]
         out[qid] = (cands, f)
     return out
 
@@ -65,6 +72,8 @@ def main():
     p.add_argument("--no-save", action="store_true")
     p.add_argument("--aug-rel-tag", default=None, help="extra train groups from paraphrased train: data/rel_train_<tag>.json")
     p.add_argument("--aug-text-tag", default=None, help="... and data/text_train_<tag>.json")
+    p.add_argument("--t2l-tag", default=None, help="third ranking: data/text_{train,val}_<tag>.json (text-to-latent)")
+    p.add_argument("--aug-t2l-tag", default=None, help="text-to-latent ranking of the paraphrased train questions")
     a = p.parse_args(); dev = torch.device(a.device)
     qa = load_qa("prime"); sp = qa.get_idx_split()
     rel = {s: json.load(open(f"data/rel_{s}_{a.rel_tag}.json")) for s in ("train", "val")}
@@ -73,15 +82,17 @@ def main():
     d = np.load("data/kg.npz"); N = len(d["node_type"])
     logdeg = np.log1p(np.bincount(d["h"], minlength=N) + np.bincount(d["t"], minlength=N)).astype(np.float32)
     info = {s: {int(qa[i][1]): (qa[i][2], i) for i in sp[s].tolist()} for s in ("train", "val")}
-    B = {s: build(rel[s], txt[s], w_rrf, logdeg, list(info[s].keys())) for s in ("train", "val")}
+    T2L = {s: json.load(open(f"data/text_{s}_{a.t2l_tag}.json")) for s in ("train", "val")} if a.t2l_tag else {"train": None, "val": None}
+    B = {s: build(rel[s], txt[s], w_rrf, logdeg, list(info[s].keys()), T2L[s]) for s in ("train", "val")}
     if a.aug_rel_tag:
         arel = json.load(open(f"data/rel_train_{a.aug_rel_tag}.json")); atxt = json.load(open(f"data/text_train_{a.aug_text_tag}.json"))
-        aug = build(arel, atxt, w_rrf, logdeg, list(info["train"].keys()))
+        at2l = json.load(open(f"data/text_train_{a.aug_t2l_tag}.json")) if a.aug_t2l_tag else None
+        aug = build(arel, atxt, w_rrf, logdeg, list(info["train"].keys()), at2l)
         B["train"] = {**B["train"], **{-qid: v for qid, v in aug.items()}}      # negative keys: paraphrased copies
         rel["train"] = {**rel["train"], **{str(-int(k)): v for k, v in arel.items()}}
         info["train"] = {**info["train"], **{-qid: v for qid, v in info["train"].items()}}
         print("augmented with paraphrased train:", sum(v is not None for v in aug.values()), "groups")
-    names = ["z", "exact", "exact/nm", "rel_rrf", "in_rel", "txt_rrf", "in_txt", "logdeg", "fused"]
+    names = ["z", "exact", "exact/nm", "rel_rrf", "in_rel", "txt_rrf", "in_txt", "logdeg", "fused", "t2l_rrf", "in_t2l"]
     drop = [names.index(x) for x in a.drop.split(",") if x]
     for D in B.values():
         for v in D.values():
@@ -118,7 +129,8 @@ def main():
         print(f"VAL reranked {tag:8s}:", {k: round(v, 4) for k, v in summarize(rows_rr).items()})
     if a.no_save: return
     json.dump({"mu": mu.tolist(), "sd": sd.tolist(), "w_global": w_g.tolist(), "w_type": {str(k): v.tolist() for k, v in w_t.items()},
-               "w_rrf": w_rrf, "rel_tag": a.rel_tag, "text_tag": a.text_tag}, open(f"data/rerank_{a.rel_tag}_{a.text_tag}.json", "w"))
+               "w_rrf": w_rrf, "rel_tag": a.rel_tag, "text_tag": a.text_tag, "t2l_tag": a.t2l_tag},
+              open(f"data/rerank_{a.rel_tag}_{a.text_tag}{'_' + a.t2l_tag if a.t2l_tag else ''}{'_aug' if a.aug_rel_tag else ''}.json", "w"))
 
 
 if __name__ == "__main__":
