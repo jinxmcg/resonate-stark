@@ -80,10 +80,12 @@ class Parser:
                 self.by_name[n].append(int(i))
             elif short_symbols and 2 <= len(n) < min_len and n.isalnum() and not n.isdigit() and int(node_type[int(i)]) in gene_t:
                 self.by_symbol[n].append(int(i))
-        if aliases:                                          # P4 lever A: aliases resolve like names (never overriding an exact name)
-            for a_, ids in aliases.items():
-                if len(a_) >= min_len and a_ not in self.by_name: self.by_name[a_] = list(ids)
-                elif short_symbols and 2 <= len(a_) < min_len and a_ not in self.by_symbol and a_ not in self.by_name: self.by_symbol[a_] = list(ids)
+        self.alias_symbols = {}
+        if aliases:                                          # P4 lever A: full gene names resolve like names; alias symbols only as uppercase tokens
+            for a_, ids in aliases.get("names", {}).items():
+                if a_ not in self.by_name: self.by_name[a_] = list(ids)
+            for a_, ids in aliases.get("symbols", {}).items():
+                if a_ not in self.by_name and a_ not in self.by_symbol: self.alias_symbols[a_] = list(ids)
         self.names_sorted = sorted(self.by_name, key=len, reverse=True)
         # (mention type, answer type) -> set of (rel, direction)   direction 0: mention --r--> answer
         self.ops = collections.defaultdict(set)
@@ -121,6 +123,8 @@ class Parser:
                 found.append((n, self.by_name[n])); used.append((m.start() + 1, m.end() + 1))
             elif n in self.by_symbol:
                 found.append((n, self.by_symbol[n])); used.append((m.start() + 1, m.end() + 1))
+            elif n in self.alias_symbols:
+                found.append((n, self.alias_symbols[n])); used.append((m.start() + 1, m.end() + 1))
         for n in self.names_sorted:
             if len(n) < 4 or n not in ql:
                 continue

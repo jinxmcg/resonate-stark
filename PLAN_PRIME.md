@@ -709,3 +709,8 @@ full names, descriptions), ranking second. Levers, each measured on plain and pa
 Reads: train (fitting), val (all decisions). test / test-0.1 / human_generated_eval: closed; one
 committed read of the final P4 pipeline at the end, the fourth read overall, reported next to P1,
 P2 and the sealed P3.
+P4 lever A, first pass (aliases matched like names, case-insensitive, any alias >= 3 chars): HURT —
+val relational path 25.9 / 42.5 / 50.7 / 33.7 plain, 20.8 / 36.7 / 46.7 / 28.4 paraphrased (P3: 26.8 /
+22.7): gene alias lists contain ordinary words, and case-insensitive matching turned them into
+spurious anchors. Second pass (before any other change): alias SYMBOLS (50,516) match only as
+uppercase tokens in the question; FULL GENE NAMES (27,430, >= 5 chars) match like names.
