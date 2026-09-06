@@ -222,3 +222,23 @@ component that is robust to wording, because the question enters the model. Reca
 (31 vs 49): the frozen table's geometry limits what a single query vector can reach. Next: joint
 run (table unfrozen), a longer frozen run (10 epochs), and text-to-latent as a third candidate
 source + reranker feature.
+Ablation complete (val, per-type reranker, bge anchors + fine-tuned text; feature groups zeroed):
+  full                                   33.7 / 58.8 / 68.0 / 45.1
+  - ResonatE z-score                     33.7 / 58.6 / 68.1 / 45.0
+  - exact traversal                      30.8 / 56.0 / 67.9 / 42.5
+  - z-score and exact traversal          30.8 / 55.6 / 68.0 / 42.4
+  - all relational features              20.7 / 45.0 / 51.2 / 31.7   (text + degree only, same candidates)
+  - text features                        32.9 / 57.8 / 68.0 / 44.5
+The graph path carries the ranking (13 Hit@1 without it); text adds 0.7 Hit@1 on top and most of
+the recall; the learned vector score adds nothing once traversal is present.
+Lever 4 results, stages 2-3:
+  joint (table unfrozen, 3 ep, 114 s)   plain 26.2 / 37.8 / 35.2 / 31.7    paraphrased 25.4 / 37.2 / 34.0 / 31.0
+  frozen table, 10 ep (593 s)            plain 23.6 / 35.3 / 33.0 / 29.0    paraphrased 23.2 / 33.9 / 32.5 / 28.2
+  frozen table, 3 ep                     plain 19.6 / 30.9 / 31.3 / 25.2    paraphrased 19.0 / 29.9 / 30.6 / 24.5
+The joint model alone has the best single-source Hit@1 on both wordings (26.2 / 25.4; relational
+path 24.6 / 19.3; fine-tuned text 22.5 / 19.4) with a phrasing gap of 0.8. Recall@20 stays ~35:
+one query vector reaches few of the multi-answer sets. Caveat for the "same model" story: the
+joint run moves the entity table with question supervision; its graph link-prediction quality
+after training is not yet re-measured (to do before any claim that one table serves both).
+Final combined evaluation queued (final_eval.sh): LLM-override retrieval + bge_ft2 text + joint
+text-to-latent as third source; reranker fit plain vs augmented; scored on plain and paraphrased val.
