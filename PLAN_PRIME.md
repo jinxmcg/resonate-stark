@@ -474,3 +474,27 @@ bootstrap 95% CIs over questions): test 41.81 [40.0, 43.7] / 68.30 [66.7, 70.1] 
 / 53.66 [52.2, 55.3]; test-0.1 41.79 [36.1, 47.5] / 71.07 [65.7, 76.4] / 75.90 [71.2, 80.5] / 54.31
 [49.5, 59.0]; human 30.61 [21.4, 39.8] / 53.06 [42.9, 63.3] / 60.58 [51.6, 69.4] / 41.74 [33.9, 50.3].
 On the human set no metric difference to AvaTaR is outside the interval except Recall@20 (+7.2).
+
+## Lever 8 pre-registration (2026-09-06, before any run) — is "one table serves both" specific to ResonatE?
+Reviewer's test: train RotatE on the same graph, freeze its embeddings, train the identical STaRK
+projector on top, compare with ResonatE under identical settings.
+Setup (rotate_prime.py, t2l_generic.py):
+  RotatE: complex entity table (N, M=144) = 288 real numbers per entity, the same width as ResonatE's
+  table; relation r = phase vector, reverse direction = conjugate rotation; score gamma - sum_m |h_m
+  e^{i theta_m} - t_m| (RotatE's L1-of-moduli distance), gamma 12; trained with the SAME regime as
+  train_prime.py (50k steps, batch 2048, 4096 uniform negatives, cross-entropy, Adam, cosine; the same
+  2% held-out slice for link MRR).
+  Projector: the same T2L module (bge_ft2 encoder, linear head to M complex dims), same loss (softmax
+  over all entities, multiple positives), same data (train + paraphrases), same epochs and lrs,
+  frozen table; readout = each model's OWN scoring function of a query vector against its table:
+  ResonatE Re<z, E_t> * exp(s) with z unit-norm (as in text2latent.py); RotatE gamma - L1 distance
+  (z unconstrained). A dot-product readout is also run for RotatE as a control.
+  Joint variant for both: table unfrozen, edge loss + question loss (as joint_train.py), 3 epochs.
+Measured on val: standalone QA plain / paraphrased (Hit@1, Hit@5, R@20, MRR, all entities); held-out
+link MRR before and after joint training. Same seed, same epochs, three seeds if the first differs
+by less than 1 Hit@1. Reads: train, val, held-out edges. Test/human closed.
+Prediction written down first: RotatE's frozen table will work about as well as ResonatE's frozen
+table under the projector (both are geometric tables of the same width); the joint variant is where
+they may differ, because ResonatE's unit-norm rows and inner-product readout are what the question
+loss trains directly. If RotatE matches on both, the claim in the paper becomes "a KG table can
+serve both" rather than "this model's table serves both", and the paper will say so.
