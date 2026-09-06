@@ -251,3 +251,26 @@ pairs, 311 s; reranker fit on plain train vs plain + paraphrased train; plain va
 The chain's four paraphrased-val scorings crashed on a feature-count mismatch (rerank.py gained
 the two text-to-latent features while the chain was running); the final combined evaluation
 re-does them with the current code. Ablation table above is complete (ABL_DONE).
+
+### P2 final combined evaluation (2026-09-06; final_eval.sh; val only, test / test-0.1 / human unopened)
+Retrieval: P1 parser + LLM parser (override) + beta 30 + bge anchors; text: bge_ft2 (plain + paraphrased
+train); RRF w 0.5; reranker fit on train (plain) or train + paraphrased train (aug); optional third
+source = joint text-to-latent (t2lj).
+                                        plain val                       paraphrased val
+  fit plain, no t2l                     34.8 / 59.8 / 69.9 / 46.4         31.6 / 55.6 / 66.4 / 42.6
+  fit aug,   no t2l          [P2 FINAL] 35.0 / 60.2 / 70.0 / 46.5         31.6 / 56.0 / 66.7 / 42.7
+  fit plain, + t2lj                     32.7 / 52.1 / 63.9 / 42.4         32.1 / 50.4 / 60.6 / 41.2
+  fit aug,   + t2lj                     32.8 / 51.7 / 63.3 / 42.2         32.2 / 50.1 / 59.9 / 41.0
+Text-to-latent as a third source HURTS (-2.2 Hit@1 plain, -8 Hit@5): its train rankings are
+in-sample (the joint model was trained on those questions, loss 0.45), so the reranker learns to
+trust it far more than it deserves on val. Proper use needs out-of-fold (k-fold) text-to-latent
+rankings on train; not done (box stopped). Same leakage exists mildly for the bge_ft2 text features.
+P2 FINAL vs P1 on val:  35.0 / 60.2 / 70.0 / 46.5  vs  26.8 / 49.7 / 58.4 / 37.3
+P2 FINAL vs P1 on paraphrased val:  31.6 / 56.0 / 66.7 / 42.7  vs  22.5 / 46.1 / 54.3 / 33.3
+Phrasing gap: P1 4.3 Hit@1 -> P2 3.4. Real-human expectation from the proxy ratio (~2x): ~28 Hit@1.
+Second committed read: NOT made; the user decides. Components to commit if made: retrieve.py
+(--llm-parse override, --beta 30 --anchor bge --dump-feats), llm_parse.py on the split's questions
+(the only new per-split step; the LLM sees question text only), embed_text2.py --model bgeft2,
+predict.py --rerank data/rerank_llm_ancf_bgeft2_aug.json --w 0.5.
+5090 box (vast 49992742) stopped 2026-09-06 after pulling logs/p2, data/*.json, models/ (2.6 GB).
+Open items: k-fold text-to-latent; re-measure the joint table's link MRR; fusion w 0.45 vs 0.5.
