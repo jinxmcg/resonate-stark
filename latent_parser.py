@@ -139,8 +139,9 @@ def main():
             lt, lo, z = net(enc); s = net.anc_scores(z, E); v, ix = s.max(2); pt = torch.sigmoid(lo)
             for rr, i in enumerate(chunk):
                 anchors = sorted({int(ix[rr, kk]) for kk in range(ck["kanc"]) if v[rr, kk] >= floor})
-                at_i = int(torch.topk(lt[rr], a.type_rank).indices[-1])
-                out[int(qa[i][1])] = {"answer_type": tn[at_i], "anchors": anchors, "ops": [int(o) for o in (pt[rr] >= a.op_thr).nonzero().flatten().tolist()]}
+                at_i = int(torch.topk(lt[rr], a.type_rank).indices[-1]); tp = torch.softmax(lt[rr], 0); t2 = torch.topk(tp, 2).values.tolist()
+                out[int(qa[i][1])] = {"answer_type": tn[at_i], "anchors": anchors, "ops": [int(o) for o in (pt[rr] >= a.op_thr).nonzero().flatten().tolist()],
+                                      "type_probs": [round(x, 4) for x in t2], "anchor_sims": [round(float(v[rr, kk]), 3) for kk in range(ck["kanc"])], "type_rank": a.type_rank}
     json.dump(out, open(a.out, "w")); print("LP_PREDICT_DONE", len(out), "->", a.out)
 
 

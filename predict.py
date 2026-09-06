@@ -19,12 +19,13 @@ def fused(rel, txt, w, k0=60):                      # same RRF as fuse.py (kept 
     return [c for c, _ in sorted(s.items(), key=lambda x: -x[1])]
 from metrics import stark_metrics, summarize
 p = argparse.ArgumentParser()
-p.add_argument("--split", required=True, choices=["test", "test-0.1", "human_generated_eval", "val"])
+p.add_argument("--split", required=True, choices=["test", "test-0.1", "human_generated_eval", "val", "train"])
 p.add_argument("--rel", required=True, help="relational ranking json for the split (from retrieve.py --split ...)")
 p.add_argument("--text", required=True, help="text ranking json for the split (from embed_text2.py)")
 p.add_argument("--w", type=float, required=True, help="fusion weight chosen on train")
 p.add_argument("--score", action="store_true", help="the one committed read: print STaRK metrics")
 p.add_argument("--rerank", default=None, help="data/rerank_<reltag>_<texttag>.json from rerank.py (P2)")
+p.add_argument("--scores-out", default=None, help="write per-query reranker scores of the top-5 (lever B selector features)")
 p.add_argument("--t2l", default=None, help="text-to-latent ranking json for the split (third candidate source, needs a reranker fit with --t2l-tag)")
 a = p.parse_args()
 qa = load_qa("prime", human_generated_eval=(a.split == "human_generated_eval"))
@@ -39,7 +40,7 @@ if a.rerank:
     T2L = json.load(open(a.t2l)) if a.t2l else None
     feats = build(rel, txt, a.w, logdeg, [int(qa[i][1]) for i in idx], T2L)
     n_rr = 0
-rows, out = [], []
+rows, out, SC = [], [], {}
 for i in idx:
     q, qid, ans, _ = qa[i]
     r = rel.get(str(qid), {}); r = r.get("top", []) if isinstance(r, dict) else r
@@ -48,11 +49,13 @@ for i in idx:
         cands, f = feats[int(qid)]; at = rel[str(qid)]["answer_type"]
         wv = np.array(RR["w_type"].get(str(at), RR["w_global"]), np.float32)
         sc = ((f - mu) / sd) @ wv
-        ranked = [cands[j] for j in np.argsort(-sc)][:100]; n_rr += 1
+        order = np.argsort(-sc); ranked = [cands[j] for j in order][:100]; n_rr += 1
+        SC[int(qid)] = {"top": [float(sc[j]) for j in order[:5]], "n_cands": int(len(cands)), "n_supported": int(sum(1 for e in rel[str(qid)]["feats"]["exact"] if e > 0)), "max_exact": float(max(rel[str(qid)]["feats"]["exact"] or [0])), "n_mentions": len(rel[str(qid)].get("mentions", []))}
     out.append((i, int(qid), ranked))
     if a.score: rows.append(stark_metrics(ranked, ans))
 with open(f"eval_results_{a.split}.csv", "w") as f:
     f.write("idx,query_id,pred_rank\n")
     for i, qid, ranked in out: f.write(f'{i},{qid},"{ranked}"\n')
+if a.scores_out: json.dump(SC, open(a.scores_out, "w"))
 print(f"wrote eval_results_{a.split}.csv with {len(out)} rows" + (f", reranked {n_rr}" if RR is not None else ""))
 if a.score: print(f"COMMITTED {a.split}:", {k: round(v, 4) for k, v in summarize(rows).items()})
