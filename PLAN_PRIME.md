@@ -674,3 +674,11 @@ the readings disagree on many questions and SELECTING the right one per question
 points. That needs a confidence signal for a reading (a selector), and, at query time, a second
 reading that does not require a generative model (deterministic variants: with / without LLM-style
 anchors, alternative answer types, alias-expanded text) — a P4 candidate; not tried.
+P3 step 3 result (box 50098239; parser retrained with the fix, 5 folds, retrievals, reranker refit
+on out-of-fold features; scripts/lp_chain.sh + scripts/lp_pipe_chain.sh):
+                       plain val                       paraphrased val
+  P2 (frozen, read)    41.3 / 67.3 / 75.3 / 53.1        39.0 / 63.6 / 71.7 / 50.4
+  P3 (fix only)        42.3 / 68.3 / 75.5 / 53.9        39.7 / 63.9 / 71.8 / 51.1
+Bar met (>= 41.3 plain; gain where short symbols occur). Step 4 (the third committed read) needs the
+user's go: it is one frozen pipeline, run once per split, dry run on val first (expected 42.26 /
+68.32 / 75.48 / 53.93), reported next to the P1 and P2 reads.
