@@ -682,3 +682,13 @@ on out-of-fold features; scripts/lp_chain.sh + scripts/lp_pipe_chain.sh):
 Bar met (>= 41.3 plain; gain where short symbols occur). Step 4 (the third committed read) needs the
 user's go: it is one frozen pipeline, run once per split, dry run on val first (expected 42.26 /
 68.32 / 75.48 / 53.93), reported next to the P1 and P2 reads.
+P3 step 4 — committed read authorised by the user on 2026-09-06 ("if we fix a bug is ok"). Pipeline
+frozen as above (models/lp.pt = the P3 parser, data/rerank_lp_ancf_bgeft2_pjoint_aug_oof.json = the
+P3 refit, everything else identical to P2). scripts/committed_read_p3.sh: dry run on val must print
+42.26 / 68.32 / 75.48 / 53.93, then test, test-0.1, human_generated_eval once each -> results_p3/.
+This is the THIRD read of the test splits; P3 is submitted whatever it says.
+P3 read: EXECUTED on the box (2026-09-06, scripts/committed_read_p3.sh) but NOT OPENED, at the
+user's request ("do not open, I really want a clean win"). The files stay sealed in results_p3/ on
+box 50098239 and the status log is not read. It still counts as a read of the test splits (the
+third) and is disclosed as such. Development continues on val only (P4); the sealed P3 files are
+either reported next to the final read or discarded unopened, never used to decide anything.
