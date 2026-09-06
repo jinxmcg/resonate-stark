@@ -734,3 +734,23 @@ often right — a selector that detects a wrong type is the largest single piece
 selector (fit on train + paraphrased train with out-of-fold parses; features of the reading only:
 type probabilities, anchor similarities, number of names, walk support, reranker top score and
 margin; label = the reading with the best MRR). Val decides.
+Lever B step 2, first selectors (features of the reading only + cross-reading agreement; fit on
+train + paraphrased train; val):
+  linear listwise     plain 43.2 / 67.7 / 75.8 / 54.4   paraphrased 40.6 / 63.5 / 72.1 / 51.4   (P3: 42.3 / 39.7; oracle 49.8 / 47.0)
+  MLP (64-32, early   plain 43.4 / 68.3 / 75.9 / 54.6   paraphrased 40.7 / 64.3 / 71.9 / 51.6
+   stop on a train slice)
++1.1 / +1.0 Hit@1: the judge captures ~15% of the headroom. It rarely picks the second answer type
+(106 of 2,241) although that reading is uniquely best on 204: the type head's own probabilities do
+not reveal when it is wrong. Next feature: an independent TYPE VOTE from the parser-free sources
+(the type distribution of the question readout's top-10 and the text ranker's top-10) and whether
+each reading's top-1 appears in those lists.
+With the parser-free type vote (types of the text ranker's and the readout's top-10; top-1 membership):
+  linear   plain 43.5 / 68.1 / 76.0 / 54.7   paraphrased 40.8 / 64.1 / 72.1 / 51.7
+  MLP      plain 44.4 / 68.1 / 75.3 / 55.1   paraphrased 40.7 / 64.2 / 71.9 / 51.7     (P3: 42.3 / 39.7)
++2.1 plain, +1.0 paraphrased Hit@1; picks the second type 145 times (of 204 where it is uniquely best).
+Soft mixture (RRF of the four readings weighted by the selector's softmax): plain 39.3 (T=1) / 41.5
+(T=0.5), paraphrased 36.9 / 38.8 — WORSE than either the P3 reading or hard selection: mixing dilutes
+a right reading with wrong ones. Hard selection stays. LEVER B CANDIDATE: P3 + the MLP selector over
+four deterministic readings: val 44.4 / 68.1 / 75.3 / 55.1 plain, 40.7 / 64.2 / 71.9 / 51.7
+paraphrased (P3: 42.3 / 39.7). models/selectorB_mlp.pt; features fit on train + paraphrased train.
+Query-time cost: four retrievals instead of one (~4x the walk+model stage, still no generative model).
