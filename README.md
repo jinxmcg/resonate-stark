@@ -189,6 +189,18 @@ paraphrases (recall drops as the head memorises answer sets); four query vectors
 The dry run of this exact command sequence on validation reproduces the development number
 (41.28 / 67.25 / 75.29 / 53.07) before any test question is read (`committed_read_p2.sh`).
 
+## Try it
+
+```bash
+PYTHONPATH=lib uv run python ask.py "shared gene targets of diethylstilbestrol and levothyroxine?"
+PYTHONPATH=lib uv run python ask.py --repl        # interactive
+```
+
+Prints what the parser read (answer type, anchors, relation hints), the ranked entities with a
+graph-support flag (`[ok]` = reached by the exact adjacency walk from the anchors it read, `[--]` =
+not graph-supported from what was read), and the per-stage timings. Needs the released weights
+(see Reproduce). About 110 ms per question warm on a GTX 1080 Ti, 32 ms on an RTX 5090.
+
 ## Reproduce
 
 Everything below is in this repository; the chain scripts are in `scripts/` and run from any

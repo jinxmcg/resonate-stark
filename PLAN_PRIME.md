@@ -618,3 +618,8 @@ operator; it acquired tighter constraints. The prediction ("(a) will improve a l
 wrong on the level (0.28) and right on the direction. The exact walk is 100 on this set.
 Not tried: longer / colder (T 0.25) training, learned per-constraint widths (Query2Box on the
 sphere), a larger conjunction set. Recorded as the second negative result on the AND.
+Post-read note (2026-09-06, ask.py demo): Parser.by_name skips names shorter than four characters
+(min_len=4), so three-letter gene symbols (GCK, TTR as an anchor, ...) are never anchored by exact
+match; the gene-symbol regex finds them but the lookup fails. Found while building the CLI demo,
+AFTER the committed read. Left unchanged in the submitted pipeline (frozen); to be fixed in any
+future P3, with the expected effect measured on val first.
