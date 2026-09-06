@@ -413,3 +413,13 @@ Seeds (2026-09-06, seeds_chain.sh), val:
   latent parser + bge fallback, relational path, plain Hit@1 / MRR | paraphrased
     s0 25.1 / 33.0 | 22.7 / 30.3;  s1 25.3 / 33.2 | 22.0 / 29.8;  s2 26.3 / 33.8 | 22.3 / 30.0
     mean +- sd: plain 25.6 +- 0.6 / 33.3 +- 0.4; paraphrased 22.3 +- 0.4 / 30.0 +- 0.3   (7B path: 24.9 / 20.9)
+Lever 7b result — latent parser inside the full pipeline (lp_pipe_chain.sh; out-of-fold parses on
+train, out-of-fold text + text-to-latent features, reranker refit; w 0.45), val:
+                                          plain Hit@1 / Hit@5 / R@20 / MRR     paraphrased
+  pipeline with regex + 7B parser (P2 FINAL)   43.5 / 67.4 / 75.7 / 54.7       40.6 / 63.3 / 71.9 / 51.3
+  pipeline with the latent parser (no LLM)     41.3 / 67.3 / 75.3 / 53.1       39.0 / 63.6 / 71.7 / 50.4
+Removing the 7B model from query time costs 2.2 Hit@1 plain / 1.6 paraphrased and 1.6 / 0.9 MRR;
+Hit@5 and Recall@20 are unchanged. On the graph path alone the latent parser was ahead; inside the
+pipeline the 7B parse's extra entity names (text-anchored per name) still buy ~2 points of Hit@1.
+Two honest pipelines, the user picks: max score (with the 7B) or no-LLM-at-query-time (-2 Hit@1).
+Pulled to jinx: models/lp*.pt, data/lparse_*, data/rel_*lp*, logs. Box 50038767 left running.
