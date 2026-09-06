@@ -719,3 +719,18 @@ path 26.6 / 42.8 / 50.9 / 34.2 plain, 22.5 / 38.6 / 47.6 / 30.1 paraphrased vs P
 34.3 and 22.7 / 38.9 / 47.8 / 30.4: -0.2 everywhere, noise level. LEVER A DROPPED: the alias cases in
 the proxy are too few to move the total, and every extra match source adds a little noise. Kept in
 the code behind --aliases (off by default). The parser stays as in P3.
+Lever B step 1 result (val, P3 pipeline, four deterministic readings; scripts/lever_b_readings.sh,
+lever_b_oracle.py):
+                                          plain Hit@1 / Hit@5 / R@20 / MRR   uniquely best   paraphrased Hit@1   uniquely best
+  r1 learned anchors + exact names (P3)   42.3 / 68.3 / 75.5 / 53.9              37             39.7                 54
+  r2 exact names only, pattern type       42.3 / 66.9 / 74.3 / 53.5             164             38.7                164
+  r3 learned anchors, floor x0.8          39.9 / 65.8 / 73.3 / 51.5             119             37.3                128
+  r4 second-best answer type              20.8 / 40.7 / 47.4 / 30.1             204             19.8                208
+  ORACLE best of four                     49.8 / 73.6 / 78.1 / 60.5                             47.0 / 70.8 / 75.2 / 57.7
+  top-1 agreement r1-r2 87%, r1-r3 83%, r1-r4 31%
+Bar (oracle > 45 on plain) MET: +7.5 Hit@1 of headroom from readings that need no generative model.
+r4 is uniquely best on 204 questions: when the answer-type head is wrong (~9%), its second choice is
+often right — a selector that detects a wrong type is the largest single piece. Step 2: build the
+selector (fit on train + paraphrased train with out-of-fold parses; features of the reading only:
+type probabilities, anchor similarities, number of names, walk support, reranker top score and
+margin; label = the reading with the best MRR). Val decides.
