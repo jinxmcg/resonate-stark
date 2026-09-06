@@ -439,3 +439,16 @@ human_generated_eval}, reading only the split's question text and ids:
 Dry run of the identical command sequence on val first (expected 41.3 / 67.3 / 75.3 / 53.1).
 Splits read: test, test-0.1, human_generated_eval (questions + ids for prediction; answers only
 inside predict.py --score). Expected from val and the proxy: synthesized ~41-43 Hit@1, human ~33-37.
+
+### P2 COMMITTED READ (2026-09-06 10:08-10:12, committed_read_p2.sh, no-LLM pipeline; second read)
+  dry run val          41.28 / 67.25 / 75.29 / 53.07   (matches the development number exactly)
+  test (2801)          41.81 / 68.30 / 74.77 / 53.66    P1 read: 28.7 / 51.9 / 59.9 / 39.1
+  test-0.1 (280)       41.79 / 71.07 / 75.90 / 54.31    P1 read: 28.2 / 50.7 / 59.9 / 38.5
+  human (98)           30.61 / 53.06 / 60.58 / 41.74    P1 read: 20.4 / 41.8 / 48.6 / 29.9
+Leaderboard (published rows, best per column): synthesized full AvaTaR 20.1 / 39.9 / 42.2 / 29.2;
+10% best 18.3 / 37.3 / 41.1 / 26.6; human AvaTaR 33.0 / 51.4 / 53.3 / 41.0.
+Standing: first on both synthesized splits on every metric (+21.7 Hit@1 full, +23.5 on 10%); on
+human: Hit@1 30.6 vs 33.0 (second, behind AvaTaR, ahead of the Claude-3 / GPT-4 rerankers at
+28.6), Hit@5 53.1 vs 51.4 (first), R@20 60.6 vs 53.3 (first), MRR 41.7 vs 41.0 (first).
+Prediction files: results_p2/eval_results_{test,test-0.1,human_generated_eval}.csv (idx, query_id,
+pred_rank top-100). Nothing is tuned after this read.
