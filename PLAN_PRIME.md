@@ -452,3 +452,25 @@ human: Hit@1 30.6 vs 33.0 (second, behind AvaTaR, ahead of the Claude-3 / GPT-4 
 28.6), Hit@5 53.1 vs 51.4 (first), R@20 60.6 vs 53.3 (first), MRR 41.7 vs 41.0 (first).
 Prediction files: results_p2/eval_results_{test,test-0.1,human_generated_eval}.csv (idx, query_id,
 pred_rank top-100). Nothing is tuned after this read.
+
+### Audit after an external review (2026-09-06; eval_check.py, bench.py)
+Wording: "no language model at query time" -> "no generative language model at query time"; two
+110M transformer encoders do run (text ranker; encoder under the parser head and the question
+readout). Measured (bench.py, RTX 5090, batch 1, 300 val questions): total median 32.0 ms, p90
+48.8 ms (parse 2.8, walk+model 21.7, text 4.2, readout 2.7, fusion+rerank 0.3); GPU memory 1.88 GiB
+loaded / 1.92 GiB peak; batched encoders + readout < 0.5 ms per question; the committed test read
+(2,801 questions, all stages, model loading) took 114 s wall-clock.
+Metrics: metrics.py truncates at the top-100 (answer outside -> reciprocal rank 0); the official
+Evaluator (top-100 with scores -i, all others tied below) can add at most 1/101 per such answer.
+eval_check.py compares both on the val predictions and rescores the three committed prediction
+files with the official Evaluator plus 2,000-sample bootstrap CIs over questions. This re-reads
+the test answers to score the SAME frozen files a second time; no model or setting changed. Note:
+torchmetrics 1.9.0 returns 0 for retrieval_reciprocal_rank / retrieval_recall on valid inputs;
+the check pins torchmetrics 1.4.0 (sanity cases correct). Results appended below when done.
+Chain scripts moved into scripts/ (repo-relative paths); release v2-no-llm carries SHA-256 sums.
+Audit results: metrics.py vs official Evaluator on val — Hit@1 / Hit@5 / R@20 identical per query;
+MRR 0.5307 both (max per-query diff 0.0016). Official rescoring of the committed files (2,000-sample
+bootstrap 95% CIs over questions): test 41.81 [40.0, 43.7] / 68.30 [66.7, 70.1] / 74.77 [73.3, 76.3]
+/ 53.66 [52.2, 55.3]; test-0.1 41.79 [36.1, 47.5] / 71.07 [65.7, 76.4] / 75.90 [71.2, 80.5] / 54.31
+[49.5, 59.0]; human 30.61 [21.4, 39.8] / 53.06 [42.9, 63.3] / 60.58 [51.6, 69.4] / 41.74 [33.9, 50.3].
+On the human set no metric difference to AvaTaR is outside the interval except Recall@20 (+7.2).

@@ -17,7 +17,7 @@
 A knowledge-graph embedding (ResonatE: unit-norm complex entity table, composable relation
 operators) trained on PrimeKG's edges and then jointly on the STaRK train questions, so that the
 same table answers link-prediction queries and natural-language questions with one readout. At
-query time no language model runs: a small learned parser head reads the question into the
+query time no generative language model is run (two 110M transformer encoders are: a fine-tuned bge-base text ranker and the parser / question encoder): a small learned parser head reads the question into the
 model's query space (answer type, anchor entities by nearest neighbour in the table, relation
 operators); an exact adjacency walk from the anchors supplies graph-supported candidates and the
 model's composed operators order them; a fine-tuned bge-base-en-v1.5 ranks node descriptions; the

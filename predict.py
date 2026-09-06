@@ -1,7 +1,11 @@
 """Write STaRK-format predictions for one split with the FROZEN pipeline (P1 committed read):
 eval_results_{split}.csv with columns idx, query_id, pred_rank (top-100 node ids, best first).
-Reads only the query text and ids of the split; never the answers. Answers are scored once, by
-STaRK's own metrics, in the same run and printed (the committed read) when --score is given.
+Reads only the query text and ids of the split; never the answers. Answers are scored once, in the
+same run, when --score is given (the committed read), with metrics.py: Hit@1, Hit@5, Recall@20 and
+MRR over the top-100 list, an answer outside the top-100 counting as reciprocal rank 0. The official
+stark_qa Evaluator, as run by the leaderboard (top-100 ids, scores -i, all other candidates tied
+below), can only score higher: an answer outside the top-100 then gets reciprocal rank <= 1/101 by
+tie order. eval_check.py measures the difference on val and rescores the committed files officially.
 Pipeline: retrieve.py ranking (beta, anchors) + text ranking (embedder tag) fused by RRF with the
 weight chosen on train (data/fusion_<tag>.json); with --rerank, the train-fit listwise reranker
 (rerank.py, P2 lever 1) reorders the fused candidates of every query with relational output."""
