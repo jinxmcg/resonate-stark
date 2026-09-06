@@ -60,6 +60,7 @@ def main():
     p.add_argument("--fold", default=None, help="K:k — train without fold k of K (by train position); with --predict-fold, parse only that fold")
     p.add_argument("--seed", type=int, default=0); p.add_argument("--labels", default="data/lp_labels.json", help="weak-label cache")
     p.add_argument("--kanc", type=int, default=3); p.add_argument("--sim-floor", type=float, default=None, help="anchor similarity floor (default: tuned on train)"); p.add_argument("--op-thr", type=float, default=0.5)
+    p.add_argument("--type-rank", type=int, default=1, help="1 = best answer type, 2 = second best (an alternative reading, lever B)")
     a = p.parse_args(); dev = torch.device("cuda"); torch.manual_seed(a.seed)
     graph, n_rel = load_model(a.model, dev); E = graph.table().detach()
     d = np.load("data/kg.npz"); names = json.load(open("data/names.json")); node_type = d["node_type"]
@@ -138,7 +139,8 @@ def main():
             lt, lo, z = net(enc); s = net.anc_scores(z, E); v, ix = s.max(2); pt = torch.sigmoid(lo)
             for rr, i in enumerate(chunk):
                 anchors = sorted({int(ix[rr, kk]) for kk in range(ck["kanc"]) if v[rr, kk] >= floor})
-                out[int(qa[i][1])] = {"answer_type": tn[int(lt[rr].argmax())], "anchors": anchors, "ops": [int(o) for o in (pt[rr] >= a.op_thr).nonzero().flatten().tolist()]}
+                at_i = int(torch.topk(lt[rr], a.type_rank).indices[-1])
+                out[int(qa[i][1])] = {"answer_type": tn[at_i], "anchors": anchors, "ops": [int(o) for o in (pt[rr] >= a.op_thr).nonzero().flatten().tolist()]}
     json.dump(out, open(a.out, "w")); print("LP_PREDICT_DONE", len(out), "->", a.out)
 
 
