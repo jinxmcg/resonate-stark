@@ -242,3 +242,12 @@ joint run moves the entity table with question supervision; its graph link-predi
 after training is not yet re-measured (to do before any claim that one table serves both).
 Final combined evaluation queued (final_eval.sh): LLM-override retrieval + bge_ft2 text + joint
 text-to-latent as third source; reranker fit plain vs augmented; scored on plain and paraphrased val.
+Lever 2c augmentation result (embedder bge_ft2 fine-tuned on plain + paraphrased train, 20,270
+pairs, 311 s; reranker fit on plain train vs plain + paraphrased train; plain val):
+  bge_ft2 text alone      22.0 / 43.0 / 50.6 / 31.9   (paraphrased val 19.6 / 41.3 / 48.1 / 29.6; bge_ft: 22.5 / 19.4)
+  fused (w 0.45 on train) 29.0 / 51.8 / 63.6 / 39.9
+  reranker, plain fit     34.4 / 60.8 / 68.3 / 46.0   (bge_ft: 33.7 / 58.8 / 68.0 / 45.1)
+  reranker, augmented fit 34.6 / 61.0 / 68.4 / 46.2
+The chain's four paraphrased-val scorings crashed on a feature-count mismatch (rerank.py gained
+the two text-to-latent features while the chain was running); the final combined evaluation
+re-does them with the current code. Ablation table above is complete (ABL_DONE).
