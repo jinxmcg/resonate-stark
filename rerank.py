@@ -74,15 +74,18 @@ def main():
     p.add_argument("--aug-text-tag", default=None, help="... and data/text_train_<tag>.json")
     p.add_argument("--t2l-tag", default=None, help="third ranking: data/text_{train,val}_<tag>.json (text-to-latent)")
     p.add_argument("--aug-t2l-tag", default=None, help="text-to-latent ranking of the paraphrased train questions")
+    p.add_argument("--train-text-tag", default=None, help="tag of the TRAIN text ranking when it differs from val (out-of-fold features)")
+    p.add_argument("--train-t2l-tag", default=None, help="tag of the TRAIN text-to-latent ranking when it differs from val (out-of-fold)")
+    p.add_argument("--save-tag", default="", help="suffix for the saved reranker file")
     a = p.parse_args(); dev = torch.device(a.device)
     qa = load_qa("prime"); sp = qa.get_idx_split()
     rel = {s: json.load(open(f"data/rel_{s}_{a.rel_tag}.json")) for s in ("train", "val")}
-    txt = {s: json.load(open(f"data/text_{s}_{a.text_tag}.json")) for s in ("train", "val")}
+    txt = {"train": json.load(open(f"data/text_train_{a.train_text_tag or a.text_tag}.json")), "val": json.load(open(f"data/text_val_{a.text_tag}.json"))}
     w_rrf = json.load(open(f"data/fusion_{a.text_tag}.json"))["w"]
     d = np.load("data/kg.npz"); N = len(d["node_type"])
     logdeg = np.log1p(np.bincount(d["h"], minlength=N) + np.bincount(d["t"], minlength=N)).astype(np.float32)
     info = {s: {int(qa[i][1]): (qa[i][2], i) for i in sp[s].tolist()} for s in ("train", "val")}
-    T2L = {s: json.load(open(f"data/text_{s}_{a.t2l_tag}.json")) for s in ("train", "val")} if a.t2l_tag else {"train": None, "val": None}
+    T2L = {"train": json.load(open(f"data/text_train_{a.train_t2l_tag or a.t2l_tag}.json")), "val": json.load(open(f"data/text_val_{a.t2l_tag}.json"))} if a.t2l_tag else {"train": None, "val": None}
     B = {s: build(rel[s], txt[s], w_rrf, logdeg, list(info[s].keys()), T2L[s]) for s in ("train", "val")}
     if a.aug_rel_tag:
         arel = json.load(open(f"data/rel_train_{a.aug_rel_tag}.json")); atxt = json.load(open(f"data/text_train_{a.aug_text_tag}.json"))
@@ -130,7 +133,7 @@ def main():
     if a.no_save: return
     json.dump({"mu": mu.tolist(), "sd": sd.tolist(), "w_global": w_g.tolist(), "w_type": {str(k): v.tolist() for k, v in w_t.items()},
                "w_rrf": w_rrf, "rel_tag": a.rel_tag, "text_tag": a.text_tag, "t2l_tag": a.t2l_tag},
-              open(f"data/rerank_{a.rel_tag}_{a.text_tag}{'_' + a.t2l_tag if a.t2l_tag else ''}{'_aug' if a.aug_rel_tag else ''}.json", "w"))
+              open(f"data/rerank_{a.rel_tag}_{a.text_tag}{'_' + a.t2l_tag if a.t2l_tag else ''}{'_aug' if a.aug_rel_tag else ''}{a.save_tag}.json", "w"))
 
 
 if __name__ == "__main__":

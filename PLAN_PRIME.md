@@ -274,3 +274,18 @@ Second committed read: NOT made; the user decides. Components to commit if made:
 predict.py --rerank data/rerank_llm_ancf_bgeft2_aug.json --w 0.5.
 5090 box (vast 49992742) stopped 2026-09-06 after pulling logs/p2, data/*.json, models/ (2.6 GB).
 Open items: k-fold text-to-latent; re-measure the joint table's link MRR; fusion w 0.45 vs 0.5.
+
+### Does ResonatE do work, or is it a graph walk + a tuned embedder? (2026-09-06, val, same parser
+(LLM override) and bge anchors in all three; model_vs_walk.sh, mvw.py)
+                               all val (2241)              answer graph-reachable (1273, 56.8%)   not reachable (968)
+  graph walk only (no model)   18.9 / 33.3 / 41.5 / 25.8    33.0 / 57.2 / 71.9 / 44.5              0.3 / 1.9 / 1.6 / 1.2
+  ResonatE only (no walk)      19.0 / 33.3 / 40.9 / 25.8    31.0 / 53.7 / 64.8 / 41.6              3.1 / 6.5 / 9.4 / 5.1
+  both (P2 retrieval)          24.9 / 40.4 / 48.8 / 32.1    42.1 / 67.1 / 78.9 / 53.5              2.2 / 5.3 / 9.3 / 4.0
+Reading: alone, the model equals the exact walk (19.0 vs 18.9 Hit@1). Together they are +6 Hit@1 over
+either: on the reachable half the walk says WHICH candidates are graph-supported and the model
+says in what ORDER (42.1 vs 33.0). The model is not decoration, and it is not the walk in disguise:
+they rank the same candidates differently and the sum is what works. The reranker ablation
+("z adds nothing") is consistent: the model's ordering enters through the relational-rank feature
+(the candidate list is already model-ordered), not through the raw z feature. The 43% of val
+queries with no graph-reachable answer are parser failures (wrong entity / type / relation) — both
+paths score ~0 there; text ranking and the reranker recover some of them.

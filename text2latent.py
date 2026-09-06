@@ -40,6 +40,7 @@ def main():
     p.add_argument("--extra", default=None, help="paraphrased train json"); p.add_argument("--epochs", type=int, default=3)
     p.add_argument("--batch", type=int, default=32); p.add_argument("--lr", type=float, default=2e-5); p.add_argument("--lr-head", type=float, default=1e-3)
     p.add_argument("--tag", default="t2l"); p.add_argument("--unfreeze-table", action="store_true"); p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--fold", default=None, help="K:k — train without fold k of K (by train position), rank only that fold (out-of-fold features)")
     a = p.parse_args(); torch.manual_seed(a.seed); dev = torch.device("cuda")
     graph, n_rel = load_model(a.model, dev)
     E = graph.table().detach().clone()                                   # (N, M) complex, frozen
@@ -51,9 +52,13 @@ def main():
         E_param = nn.Parameter(torch.view_as_real(E).clone()); E_param.requires_grad_(True)
     qa = load_qa("prime"); sp = qa.get_idx_split()
     EXTRA = json.load(open(a.extra)) if a.extra else {}
-    train = []
-    for i in sp["train"].tolist():
-        q, qid, ans, _ = qa[i]; train.append((q, ans))
+    train, held = [], []
+    K, k = (int(x) for x in a.fold.split(":")) if a.fold else (0, -1)
+    for pos, i in enumerate(sp["train"].tolist()):
+        q, qid, ans, _ = qa[i]
+        if a.fold and pos % K == k:
+            held.append(i); continue
+        train.append((q, ans))
         if str(int(qid)) in EXTRA: train.append((EXTRA[str(int(qid))], ans))
     print("train questions (incl. paraphrases):", len(train), flush=True)
     groups = [{"params": net.enc.parameters(), "lr": a.lr}, {"params": list(net.head.parameters()) + [net.scale], "lr": a.lr_head}]
@@ -78,6 +83,18 @@ def main():
             if step % 100 == 0: print(f"ep {ep} step {step}/{steps} loss {loss.item():.3f} {round(time.time()-t0)} s", flush=True)
         print(f"epoch {ep} mean loss {tot / max(1, (len(perm) + a.batch - 1) // a.batch):.3f}", flush=True)
     net.eval(); Et = (torch.view_as_complex(E_param) if E_param is not None else E).detach()
+    if a.fold:                                                           # rank the held-out fold (plain + paraphrased) and stop
+        os.makedirs("data/oof", exist_ok=True)
+        for suf, QS in (("", {}), ("_para", EXTRA)):
+            out = {}
+            for b in range(0, len(held), 64):
+                chunk = held[b:b + 64]
+                with torch.no_grad():
+                    enc = tok([QPRE + QS.get(str(int(qa[i][1])), qa[i][0]) for i in chunk], return_tensors="pt", padding=True, truncation=True, max_length=128).to(dev)
+                    top = torch.topk(net.score(net(enc), Et), 100, 1).indices.cpu().numpy()
+                for r, i in enumerate(chunk): out[int(qa[i][1])] = top[r].tolist()
+            json.dump(out, open(f"data/oof/{a.tag}_f{k}{suf}.json", "w"))
+        print("OOF_DONE", k, len(held), round(time.time() - t0), "s"); return
     rel_val = json.load(open("data/rel_val_ancf.json"))                 # parser answer types on val (val is a development split)
     for split_tag, qfile in (("", None), ("_para", "data/para_val.json")):
         QS = json.load(open(qfile)) if qfile else {}

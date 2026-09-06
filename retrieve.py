@@ -186,7 +186,7 @@ class Adjacency:
 
 
 @torch.no_grad()
-def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, adj=None, beta=0.0, feats=False):
+def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, adj=None, beta=0.0, feats=False, no_model=False, logdeg=None):
     at_idx, ments = parsed
     if at is None or not ments:
         return ([], None) if feats else []
@@ -203,6 +203,8 @@ def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, a
             for chain, wt in w.items():
                 hit[adj.reach(i, chain)] = True
             exact += torch.from_numpy(hit).to(dev).float()
+        if no_model:
+            continue
         for chain, wt in w.items():
             z = model.embed(torch.tensor([i], device=dev))
             for (r, d) in chain:                          # compiled chain: apply the hops in order
@@ -215,6 +217,8 @@ def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, a
             best = zs if best is None else torch.maximum(best, zs)
         total += best
     total = total + beta * exact
+    if no_model and logdeg is not None:
+        total = total + 1e-3 * logdeg
     total[~mask] = -1e9
     tk = torch.topk(total, k).indices
     top = tk.tolist()
@@ -235,6 +239,7 @@ def main():
     p.add_argument("--anchor-weight", type=float, default=0.7)
     p.add_argument("--queries", default=None, help="json {query_id: text} replacing the question text (paraphrase proxy; train/val only)")
     p.add_argument("--llm-parse", default=None, help="data/llmparse_<tag>.json from llm_parse.py: answer type fallback, relation hints, entity names, exclusion")
+    p.add_argument("--no-model", action="store_true", help="ablation: drop the ResonatE score entirely; rank by exact-support count only (ties by node degree)")
     p.add_argument("--llm-override-type", action="store_true", help="let the LLM answer type override the pattern one (default: fallback only)")
     p.add_argument("--dump-feats", action="store_true", help="also store per-candidate z-sum and exact count (reranker features)")
     a = p.parse_args()
@@ -249,6 +254,7 @@ def main():
         parser.ops2 = {}
     type_mask = {t: torch.from_numpy(node_type == i).to(dev) for i, t in tn.items()}
     deg = {rr: np.bincount(d["h"][d["r"] == rr], minlength=len(node_type)) for rr in range(int(d["n_rel"]))}
+    logdeg_all = torch.from_numpy(np.log1p(np.bincount(d["h"], minlength=len(node_type)) + np.bincount(d["t"], minlength=len(node_type))).astype(np.float32)).to(dev)
     adj = Adjacency(d, int(d["n_rel"]), len(node_type)) if a.beta > 0 else None
     anchor = None
     if a.anchor:
@@ -318,7 +324,7 @@ def main():
         if neg is None and lp.get("exclude_relation") in rel_ids:
             neg = rel_ids[lp["exclude_relation"]]
         excl = torch.from_numpy(deg[neg] > 0).to(dev) if neg is not None else None
-        top = score_query(model, n_rel, (at, ments), at, type_mask, dev, exclude=excl, adj=adj, beta=a.beta, feats=a.dump_feats)
+        top = score_query(model, n_rel, (at, ments), at, type_mask, dev, exclude=excl, adj=adj, beta=a.beta, feats=a.dump_feats, no_model=a.no_model, logdeg=logdeg_all)
         fe = None
         if a.dump_feats:
             top, fe = top
