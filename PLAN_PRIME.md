@@ -714,3 +714,8 @@ val relational path 25.9 / 42.5 / 50.7 / 33.7 plain, 20.8 / 36.7 / 46.7 / 28.4 p
 22.7): gene alias lists contain ordinary words, and case-insensitive matching turned them into
 spurious anchors. Second pass (before any other change): alias SYMBOLS (50,516) match only as
 uppercase tokens in the question; FULL GENE NAMES (27,430, >= 5 chars) match like names.
+P4 lever A, second pass (symbols as uppercase tokens only; full gene names like names): val relational
+path 26.6 / 42.8 / 50.9 / 34.2 plain, 22.5 / 38.6 / 47.6 / 30.1 paraphrased vs P3 26.8 / 42.9 / 51.0 /
+34.3 and 22.7 / 38.9 / 47.8 / 30.4: -0.2 everywhere, noise level. LEVER A DROPPED: the alias cases in
+the proxy are too few to move the total, and every extra match source adds a little noise. Kept in
+the code behind --aliases (off by default). The parser stays as in P3.
