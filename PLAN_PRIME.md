@@ -352,3 +352,14 @@ R@20 35). Two tuning levers now, the latent parser later:
 Measured on plain and paraphrased val: standalone all-entities Hit@1 / R@20 / MRR, held-out link
 MRR. The best by plain-val standalone MRR then gets out-of-fold rankings and the reranker fit, for
 the pipeline number. Reads: train, val, held-out edges. test / test-0.1 / human closed.
+Lever 6 results (standalone one-table readout, all entities, full val; link MRR on the 5000-edge check):
+                                              plain Hit@1 / Hit@5 / R@20 / MRR   paraphrased                      link MRR
+  p_joint     3 ep, 1 vector, 1 para set      26.6 / 37.9 / 35.4 / 32.0          25.4 / 37.6 / 34.2 / 31.1        0.568
+  p_jointv4   3 ep, 4 vectors, 1 para set     27.8 / 39.6 / 36.6 / 33.5          27.6 / 38.6 / 35.8 / 32.9        0.570   [BEST]
+  p_joint10   10 ep, 1 vector, 2 para sets    27.6 / 37.6 / 32.8 / 32.3          27.5 / 37.3 / 32.4 / 32.1        0.567
+  p_joint10v4 10 ep, 4 vectors, 2 para sets   27.1 / 38.4 / 34.3 / 32.3          26.6 / 38.1 / 34.0 / 32.0        0.567
+Multi-vector (V=4) helps on every metric (+1.2 Hit@1, +1.2 R@20, +1.5 MRR, phrasing gap 0.2).
+Longer training with a second paraphrase set does not: Hit@1 flat, Recall@20 down 2-4 (question
+loss ~0.1: the head overfits the train answer sets). The recall ceiling (~36) is not the vector
+count or the data; it is the single-readout formulation (no exact AND over constraints) — the
+latent parser is the next lever. Pipeline test: out-of-fold p_jointv4 rankings + reranker (running).

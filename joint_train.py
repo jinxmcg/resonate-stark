@@ -64,6 +64,7 @@ def main():
     p.add_argument("--ebatch", type=int, default=2048); p.add_argument("--neg", type=int, default=4096); p.add_argument("--lam", type=float, default=0.1)
     p.add_argument("--lr-table", type=float, default=1e-3); p.add_argument("--lr-ops", type=float, default=1e-4); p.add_argument("--lr-enc", type=float, default=2e-5); p.add_argument("--lr-head", type=float, default=1e-3)
     p.add_argument("--wq", type=float, default=1.0, help="weight of the question loss"); p.add_argument("--tag", default="p_joint"); p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--eval-every", type=int, default=200, help="quick progress eval (500 plain + 500 paraphrased val questions, 1000 held-out edges) every N steps")
     p.add_argument("--nvec", type=int, default=1, help="latent vectors per question (score = max over them)")
     p.add_argument("--extra2", default=None, help="a second paraphrase set of train")
     p.add_argument("--fold", default=None, help="K:k — train without fold k of K (by train position); rank only that fold, plain + paraphrased, to data/oof/<tag>_f<k>[_para].json")
@@ -98,6 +99,23 @@ def main():
     opt = torch.optim.Adam([{"params": [model.E_real], "lr": a.lr_table}, {"params": ops, "lr": a.lr_ops},
                             {"params": net.enc.parameters(), "lr": a.lr_enc}, {"params": list(net.head.parameters()) + [net.scale], "lr": a.lr_head}])
     steps = a.epochs * ((len(train) + a.qbatch - 1) // a.qbatch); sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=steps)
+    # quick progress eval: fixed 500-question subsets of plain / paraphrased val, 1000 held-out edges
+    PV = json.load(open("data/para_val.json")); vidx = sp["val"].tolist()[:500]
+    qv_plain = [qa[i][0] for i in vidx]; qv_para = [PV.get(str(int(qa[i][1])), qa[i][0]) for i in vidx]; av = [set(qa[i][2]) for i in vidx]
+    def quick_eval():
+        model.eval(); net.eval(); out = []
+        with torch.no_grad():
+            E = model.table()
+            for qs in (qv_plain, qv_para):
+                hit = 0
+                for b in range(0, len(qs), 100):
+                    enc = tok([QPRE + q for q in qs[b:b+100]], return_tensors="pt", padding=True, truncation=True, max_length=128).to(dev)
+                    top1 = net.score(net(enc), E).argmax(1).tolist()
+                    hit += sum(t in av[b + j] for j, t in enumerate(top1))
+                out.append(hit / len(qs))
+            mt, mh = mrr_holdout(model, val, N, n_rel, dev, n=1000)
+        model.train(); net.train()
+        return out[0], out[1], (mt + mh) / 2
     model.train(); net.train(); t0 = time.time(); step = 0
     for ep in range(a.epochs):
         perm = torch.randperm(len(train)).tolist(); le = lq = 0.0; nb = 0
@@ -120,6 +138,8 @@ def main():
             clip_grad_norm_(list(model.parameters()), 1.0); torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
             opt.step(); sched.step(); step += 1; le += loss_e.item(); lq += loss_q.item(); nb += 1
             if step % 100 == 0: print(f"ep {ep} step {step}/{steps} edge {loss_e.item():.3f} question {loss_q.item():.3f} {round(time.time()-t0)} s", flush=True)
+            if a.eval_every and step % a.eval_every == 0:
+                ph, hh, lm = quick_eval(); print(f"PROGRESS step {step}/{steps}  plain Hit@1 {ph*100:.1f}  human-style Hit@1 {hh*100:.1f}  link MRR {lm:.4f}  ({round(time.time()-t0)} s)", flush=True)
         print(f"epoch {ep} mean edge loss {le/nb:.3f} question loss {lq/nb:.3f}", flush=True)
     model.eval(); net.eval()
     if a.fold:
