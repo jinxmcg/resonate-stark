@@ -644,3 +644,24 @@ val with the fix (latent parser + bge fallback, beta 30), fixed vs frozen:
   paraphrased  23.5 / 39.8 / 48.2 / 31.1   vs  22.7 / 38.8 / 47.1 / 30.3   (+0.8 Hit@1)
 Helps, hurts nothing. Step 3 launched on jinx: weak labels rebuilt, latent parser + 5 folds retrained,
 train/val retrievals, reranker refit, val scoring (scripts/lp_chain.sh then scripts/lp_pipe_chain.sh).
+
+### Proxy error analysis (2026-09-06, val only; the human set stays closed)
+P2 pipeline, val: 925 plain-wording Hit@1 hits; 190 of them (20.5%) become misses on the
+paraphrase, while 138 paraphrase hits are plain misses (net -52 = the -2.3 Hit@1 gap; the churn
+is 4x the net). Why the 190 are lost:
+   122  64%  an anchor read in plain wording is not read in the paraphrase
+                of which  90 (74%) a REAL anchor that reached the answer in the graph — aliases
+                          (SLCO1B3 -> OATP1B3), descriptions for names ("low potassium levels" for
+                          hypokalemia), shortened pathway names; 23 (19%) only spurious name matches
+                          (generic words such as "blood", "growth", "cancer", "Disease"); 9 (7%)
+                          the paraphrase itself is corrupted (the 7B model switched to Chinese
+                          mid-sentence: 30 / 2,241 val and 93 / 6,162 train paraphrases, 1.3-1.5%)
+    46  24%  answer graph-supported in both, lost in ranking (reranker / fusion)
+    12   6%  answer only in the text / readout lists: the walk missed it (relation read differently)
+     9   5%  wrong answer type
+     1   1%  in the walk's candidates but unsupported (negation / relation)
+Conclusion: entity resolution under rewording is the dominant failure (aliases, descriptions,
+shortened names), ranking second; relations, negation and answer type are minor. A P4 would be
+(i) alias / synonym resolution for anchors (PrimeKG node text carries synonyms; the latent anchor
+head could be trained on alias mentions), (ii) a parse-confidence feature in the reranker,
+(iii) cleaner and harder paraphrases (filter CJK; several styles per question).
