@@ -178,3 +178,21 @@ the 98 real human queries). Under P2 the paraphrase cost is -3.6 Hit@1; both hal
 lose about 5 Hit@1 to phrasing. Next: paraphrased `train` as augmentation (embedder + reranker fit
 on plain + paraphrased train), then the LLM parser (2c(b)); measured on plain and paraphrased val.
 Ablation (cont.): dropping exact traversal from the reranker: 30.8 / 56.0 / 67.9 / 42.5.
+Lever 2c(b) smoke (llm_parse.py, Qwen2.5-7B-Instruct, greedy, 3-shot, 64 val questions, 28 s):
+all 64 parsed to valid JSON; entities and types look right (e.g. "Mucopolysaccharidosis Type VII
+(Sly syndrome)" -> disease; "USH1C" -> gene/protein); relation hints lean on "interacts with".
+Retrieval with it (fallback mode): coverage 61 -> 64 of 64, relational-only Hit@1 18.8 vs 20.3
+without (64 questions: noise level, no gain visible). Full val + paraphrased val runs queued.
+Ablation (cont.): dropping z AND exact: 30.8 / 55.6 / 68.0 / 42.4 (= dropping exact alone).
+Lever 4 (added 2026-09-06, before any run) — text-to-latent: put the question INTO the model.
+The table was trained on edges only; language was attached next to it (embedder, parser,
+reranker), so phrasing never enters the model and the vector score carries no ranking information
+beyond traversal + text (ablation above). Lever 4 trains a question encoder into the ResonatE
+latent space: z_q = head(bge_ft(question)) with M = 144 complex dims; score(q, t) = Re<z_q, E_t> * e^tau
+with the entity table E FROZEN from models/p_k12b4_50k.pt; loss = softmax cross-entropy over the
+answer nodes against in-batch + uniform negatives restricted to the answer type when known;
+training data = `train` questions + their paraphrases (data/para_train.json). Evaluated on plain
+and paraphrased val: text-to-latent alone vs fine-tuned text alone; then as a third candidate
+source in fusion and as a reranker feature. Second stage if the first helps: unfreeze the table
+and train edges + questions jointly (the model trained "with the language").
+Reads: train (fitting), val (all numbers). test / test-0.1 / human: closed.
