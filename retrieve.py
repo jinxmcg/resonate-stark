@@ -239,6 +239,7 @@ def main():
     p.add_argument("--anchor-weight", type=float, default=0.7)
     p.add_argument("--queries", default=None, help="json {query_id: text} replacing the question text (paraphrase proxy; train/val only)")
     p.add_argument("--llm-parse", default=None, help="data/llmparse_<tag>.json from llm_parse.py: answer type fallback, relation hints, entity names, exclusion")
+    p.add_argument("--lparse", default=None, help="latent parser output (latent_parser.py): answer type, anchor ids, operator ids per query; replaces the regex/LLM parse (exact-name mentions kept as fallback)")
     p.add_argument("--no-model", action="store_true", help="ablation: drop the ResonatE score entirely; rank by exact-support count only (ties by node degree)")
     p.add_argument("--llm-override-type", action="store_true", help="let the LLM answer type override the pattern one (default: fallback only)")
     p.add_argument("--dump-feats", action="store_true", help="also store per-candidate z-sum and exact count (reranker features)")
@@ -269,6 +270,7 @@ def main():
     QS = json.load(open(a.queries)) if a.queries else None
     assert QS is None or not predict_only
     LP = json.load(open(a.llm_parse)) if a.llm_parse else None
+    LPZ = json.load(open(a.lparse)) if a.lparse else None
     rel_ids = {v: int(k) for k, v in dicts["edge_type_dict"].items()}
     type_ok = set(tn.values()); n_llm_type = n_llm_ent = 0
     rows_all, rows_cov, out, n_cov, n_type, t0 = [], [], {}, 0, 0, time.time()
@@ -282,7 +284,17 @@ def main():
         at0 = parser.answer_type(q)
         at_use = (l_at or at0) if a.llm_override_type else (at0 or l_at)
         n_llm_type += (at0 is None and l_at is not None)
+        if LPZ is not None:                                   # latent parser: learned answer type, anchors and operator hints
+            lz = LPZ.get(str(int(qid))) or {}
+            at_use = lz.get("answer_type") if lz.get("answer_type") in type_ok else at0
+            l_rels = {int(o) % n_rel for o in lz.get("ops", [])}
         at, ments = parser.parse(q, at=at_use, rel_hints=l_rels, extra_names=[e["name"] for e in l_ents])
+        if LPZ is not None and at is not None:
+            have = {i_ for i_, _, _, _ in ments}
+            for i_ in lz.get("anchors", []):
+                if i_ in have: continue
+                mt = tn[int(node_type[i_])]; w = parser.chain_weights(mt, at, q, l_rels)
+                if w: ments.append((i_, names[str(i_)].lower(), mt, w)); n_llm_ent += 1
         n_type += at is not None
         if anchor is not None and at is not None and not ments and l_ents:      # resolve the LLM's entity names by text, per name
             emb, st, qpre = anchor

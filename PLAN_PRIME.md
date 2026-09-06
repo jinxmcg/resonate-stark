@@ -370,3 +370,25 @@ Tied within noise (Hit@1 -0.3 / -0.7, Hit@5 and R@20 +0.4 to +0.6): the standalo
 4-vector head does not carry into the pipeline, where the exact walk already supplies what the
 extra vectors add. P2 FINAL stays the p_joint pipeline. Lever 6 closed; next lever = latent parser.
 Box 50038767 left running per the user (they will use it).
+
+## Lever 7 pre-registration (2026-09-06, before any run) — latent parser
+Goal: a LEARNED reader of the question into the model's structured query space, replacing the
+regex parser + keyword map + 7B parser; execution stays the model's own machinery (operator
+composition for the soft score, adjacency walk for the exact AND). Standalone = table + operators
++ one small head + the graph; no text index, no reranker.
+latent_parser.py, on the p_joint encoder (CLS, 768-d):
+  heads: answer type (10-way softmax); relation operators (36-way multi-label, sigmoid);
+         anchors: K=3 latent vectors in the entity space, scored against the FROZEN p_joint table,
+         softmax with multiple positives = the anchor entity ids.
+  weak labels from train (+ paraphrases): answer type = majority type of the answers; anchor ids =
+         exact-name mentions (Parser.mentions) + LLM-parse entity names resolved exactly; operator
+         labels = the (r, d) operators (and both ops of a two-hop chain) whose exact walk from an
+         anchor reaches an answer.
+  execution (retrieve.py --lparse): answer type from the head; anchors = nearest table entities of
+         the K vectors above a train-tuned similarity floor, unioned with exact-name mentions
+         (string fallback); operator weights 2.0 for predicted ops, 1.0 otherwise; beta 30, walk +
+         model score as in P1/P2. All thresholds tuned on train.
+Measured on plain and paraphrased val, relational-only (uncovered = miss):
+  references: regex parser 24.6 / 19.3; regex + 7B override 24.9 / 20.9; full pipeline 43.5 / 40.6.
+  success = latent parser >= 7B-override path on plain AND a smaller phrasing gap than 4.0.
+Reads: train, val. test / test-0.1 / human closed. Box: ask the user before using the NL 5090.
