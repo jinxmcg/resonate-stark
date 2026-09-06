@@ -196,3 +196,17 @@ and paraphrased val: text-to-latent alone vs fine-tuned text alone; then as a th
 source in fusion and as a reranker feature. Second stage if the first helps: unfreeze the table
 and train edges + questions jointly (the model trained "with the language").
 Reads: train (fitting), val (all numbers). test / test-0.1 / human: closed.
+Lever 2c(b) result — LLM parser (Qwen2.5-7B-Instruct, greedy, 3-shot; 2241 val questions in 560 s,
+5 unparsable; paraphrased val 536 s, 3 unparsable). Used for: answer type (fallback = only when the
+pattern parser finds none; override = LLM first), relation hints, extra entity names (exact lookup,
+then per-name text anchoring when nothing else resolved), exclusion relation.
+                                  plain val                    paraphrased val
+  relational only, no LLM         24.6 / 41.6 / 50.0 / 32.6      19.3 / 34.4 / 42.1 / 26.4
+  relational only, LLM fallback   24.2 / 39.3 / 47.6 / 31.3      19.7 / 35.3 / 43.5 / 27.0
+  relational only, LLM override   24.9 / 40.4 / 48.8 / 32.1      20.9 / 36.9 / 45.5 / 28.5
+  P2 full (bgeft text + reranker) 33.7 / 58.8 / 68.0 / 45.1      30.0 / 53.1 / 63.3 / 41.0
+  P2 full + LLM fallback          33.8 / 58.3 / 68.2 / 45.1      30.1 / 53.7 / 63.9 / 41.3
+  P2 full + LLM override          34.6 / 59.2 / 68.9 / 46.0      30.9 / 54.8 / 65.2 / 42.3
+Coverage 96.2% -> 100.0% (plain), 94.2% -> 99.8% (paraphrased). Override mode kept: +0.9 Hit@1 on
+both, +0.9 / +1.3 MRR; the paraphrase gap is unchanged (~3.7 Hit@1), so the LLM parser adds
+coverage rather than phrasing robustness. Reranker here is the plain-train fit on bgeft features.
