@@ -516,3 +516,11 @@ plainly: single seed; RotatE's L2 variant with my initialisation and lr 1e-3 (no
 MRR is 0.034 below ResonatE's under the same regime, so part of the gap may be an under-tuned
 control); one dataset. A RotatE tuning sweep (lr x gamma, chosen by held-out link MRR, never by QA)
 follows before the claim is written into the paper.
+Lever 8 sweep (scripts/lever8_sweep.sh; chosen by held-out LINK MRR only): lr 3e-4 -> 0.462; lr 3e-3 ->
+0.549; gamma 6 -> 0.522; gamma 24 -> 0.523 (default lr 1e-3 gamma 12: 0.523). Best RotatE table
+(lr 3e-3, link MRR 0.549, i.e. 0.008 below ResonatE's 0.557) under the identical frozen projector:
+  distance readout       15.5 / 25.4 / 27.2 / 20.6 plain    14.9 / 25.4 / 26.8 / 20.0 paraphrased
+  inner-product readout  15.8 / 27.6 / 28.0 / 21.6 plain    15.0 / 27.2 / 27.1 / 20.7 paraphrased
+  (ResonatE frozen:      19.7 / 30.7 / 31.8 / 25.2 plain    19.3 / 29.8 / 30.6 / 24.6)
+So much of the first gap WAS the under-tuned control: at near-equal link quality the frozen gap is
+~4 Hit@1 (20% relative), not half. Joint on the tuned RotatE table: pending (below).
