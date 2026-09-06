@@ -9,7 +9,8 @@ from train_prime import load_kg
 from retrieve import Parser, Adjacency
 
 def main():
-    p = argparse.ArgumentParser(); p.add_argument("--n-train", type=int, default=60000); p.add_argument("--n-val", type=int, default=2000); p.add_argument("--seed", type=int, default=0); a = p.parse_args()
+    p = argparse.ArgumentParser(); p.add_argument("--n-train", type=int, default=60000); p.add_argument("--n-val", type=int, default=2000); p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--max-seconds", type=int, default=480, help="stop sampling after this long and keep what was collected"); a = p.parse_args()
     random.seed(a.seed); rng = np.random.default_rng(a.seed)
     N, n_rel, (h, r, t), val, node_type = load_kg(); kg = {"h": h, "r": r, "t": t}
     adj = Adjacency(kg, n_rel, N)
@@ -19,18 +20,26 @@ def main():
     for (mt, at), ops in parser.ops.items(): chains.setdefault((mt, at), []).extend([((rr, d),) for (rr, d) in ops])
     for (mt, at), ops2 in parser.ops2.items(): chains.setdefault((mt, at), []).extend(list(ops2))
     by_type = {ti: np.nonzero(node_type == ti)[0] for ti in tn}
+    has_edge = {key: (np.diff(A.indptr) > 0) for key, A in adj.A.items()}      # nodes with at least one edge under operator (r, d)
+    pool_cache = {}
+    def pool_for(mt, chain):
+        key = (mt, chain[0])
+        if key not in pool_cache:
+            pool_cache[key] = np.intersect1d(by_type[ktype[mt]], np.nonzero(has_edge[chain[0]])[0])
+        return pool_cache[key]
     val_anchor = set(rng.choice(N, size=N // 10, replace=False).tolist())    # 10% of nodes reserved as val anchors
     out = {"train": [], "val": []}; t0 = time.time(); tries = 0
     keys = list(chains.keys())
-    while len(out["train"]) < a.n_train or len(out["val"]) < a.n_val:
+    while (len(out["train"]) < a.n_train or len(out["val"]) < a.n_val) and time.time() - t0 < a.max_seconds:
         tries += 1
+        if tries % 1000 == 0: print(f"tries {tries}: train {len(out['train'])} val {len(out['val'])} ({round(time.time()-t0)} s)", flush=True)
         at = tn[random.randrange(len(tn))]; k = random.choice([2, 2, 3])
         cons, sets = [], []
         for _ in range(k):
             cand = [key for key in keys if key[1] == at]
             if not cand: break
             mt, _ = random.choice(cand); chain = random.choice(chains[(mt, at)])
-            pool = by_type[ktype[mt]]
+            pool = pool_for(mt, chain)
             if len(pool) == 0: break
             an = int(rng.choice(pool)); reach = set(adj.reach(an, chain).tolist())
             reach = {x for x in reach if node_type[x] == ktype[at]}
@@ -43,7 +52,6 @@ def main():
         split = "val" if all(c[0] in val_anchor for c in cons) else ("train" if not any(c[0] in val_anchor for c in cons) else None)
         if split is None or len(out[split]) >= (a.n_val if split == "val" else a.n_train): continue
         out[split].append({"answer_type": at, "constraints": cons, "answers": sorted(inter)})
-        if tries % 20000 == 0: print(f"tries {tries}: train {len(out['train'])} val {len(out['val'])} ({round(time.time()-t0)} s)", flush=True)
     for s_ in ("train", "val"): json.dump(out[s_], open(f"data/conj_{s_}.json", "w"))
     ks = [len(q["constraints"]) for q in out["train"]]; na = [len(q["answers"]) for q in out["train"]]
     print(f"CONJ_DONE train {len(out['train'])} val {len(out['val'])}; constraints mean {np.mean(ks):.2f}; answers mean {np.mean(na):.1f} median {np.median(na):.0f}; {round(time.time()-t0)} s")

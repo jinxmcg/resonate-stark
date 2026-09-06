@@ -3,7 +3,7 @@
 cd "$(dirname "$0")/.."; export PATH=$HOME/.local/bin:$PATH PYTHONPATH=lib
 st() { echo "$(date +%H:%M:%S) $1" >> logs/lever10_status.log; }
 st "1. sampling conjunctions"
-uv run python conj_sample.py --n-train 60000 --n-val 2000 > logs/conj_sample.log 2>&1; grep "CONJ_DONE" logs/conj_sample.log | sed "s/^/    /" >> logs/lever10_status.log
+uv run python conj_sample.py --n-train 30000 --n-val 1500 --max-seconds 480 > logs/conj_sample.log 2>&1; grep "CONJ_DONE" logs/conj_sample.log | sed "s/^/    /" >> logs/lever10_status.log
 st "2. AND training, 1000 steps (typed synthetic eval)"
 uv run python and_train.py --steps 1000 --tag p_and --typed > logs/and_train.log 2>&1
 grep "\[link\]\|^CONJ" logs/and_train.log | sed "s/^/    /" >> logs/lever10_status.log

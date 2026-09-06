@@ -41,7 +41,7 @@ def main():
     p = argparse.ArgumentParser(); p.add_argument("--model", default="models/p_joint.pt"); p.add_argument("--tag", default="p_and")
     p.add_argument("--steps", type=int, default=1000); p.add_argument("--cbatch", type=int, default=128); p.add_argument("--T", type=float, default=1.0)
     p.add_argument("--lr-table", type=float, default=1e-3); p.add_argument("--lr-ops", type=float, default=1e-4); p.add_argument("--wc", type=float, default=1.0); p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--n-eval", type=int, default=1000); p.add_argument("--typed", action="store_true", help="restrict the synthetic eval to the answer type")
+    p.add_argument("--n-eval", type=int, default=1000); p.add_argument("--eval-every", type=int, default=200); p.add_argument("--typed", action="store_true", help="restrict the synthetic eval to the answer type")
     a = p.parse_args(); dev = torch.device("cuda"); torch.manual_seed(a.seed)
     N, n_rel, (h, r, t), val, node_type = load_kg(); ck = torch.load(a.model, map_location=dev, weights_only=False); ar = ck["args"]
     model = SparseTableResonatE(N, 2 * n_rel, k=ar["k"], block_size=ar["block_size"], sparse_grad=False, device=dev); model.load_state_dict(ck["model"])
@@ -54,6 +54,18 @@ def main():
     ops = [q for n_, q in model.named_parameters() if n_ != "E_real"]
     opt = torch.optim.Adam([{"params": [model.E_real], "lr": a.lr_table}, {"params": ops, "lr": a.lr_ops}]); sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=a.steps)
     hh, rr_, tt = (torch.from_numpy(x).to(dev) for x in (h, r, t)); gen = torch.Generator(device=dev); gen.manual_seed(a.seed); t0 = time.time(); model.train()
+    QP = CV[:200]
+    @torch.no_grad()
+    def quick():
+        model.eval(); rows = {"sum": [], "softmin": []}
+        for q in QP:
+            S = constraint_scores(model, [(c[0], [tuple(x) for x in c[1]]) for c in q["constraints"]], n_rel, dev)
+            for agg in rows:
+                s = combine(S, agg)
+                if type_mask is not None: s = s.masked_fill(~type_mask[q["answer_type"]], -1e9)
+                rows[agg].append(stark_metrics(torch.topk(s, 100).indices.tolist(), q["answers"]))
+        mt_, mh_ = mrr_holdout(model, val, N, n_rel, dev, n=1000); model.train()
+        return summarize(rows["sum"])["hit1"], summarize(rows["softmin"])["hit1"], (mt_ + mh_) / 2
     for step in range(1, a.steps + 1):
         idx = torch.randint(0, len(hh), (2048,), device=dev, generator=gen); rev = torch.rand(2048, device=dev, generator=gen) < 0.5
         src = torch.where(rev, tt[idx], hh[idx]); dst = torch.where(rev, hh[idx], tt[idx]); negs = torch.randint(0, N, (4096,), device=dev, generator=gen)
@@ -68,6 +80,9 @@ def main():
         loss_c = loss_c / len(batch); loss = loss_e + a.wc * loss_c
         opt.zero_grad(set_to_none=True); loss.backward(); clip_grad_norm_(list(model.parameters()), 1.0); opt.step(); sched.step()
         if step % 100 == 0: print(f"step {step}/{a.steps} edge {loss_e.item():.3f} conj {float(loss_c):.3f} ({round(time.time()-t0)} s)", flush=True)
+        if a.eval_every and step % a.eval_every == 0:
+            h_sum, h_soft, lm = quick(); el = time.time() - t0
+            print(f"PROGRESS step {step}/{a.steps}  synthetic Hit@1 sum {h_sum*100:.1f} softmin {h_soft*100:.1f}  link MRR {lm:.4f}  lr table {sched.get_last_lr()[0]:.2e}  elapsed {round(el)} s  ETA {round(el/step*(a.steps-step))} s", flush=True)
     model.eval(); mt, mh = mrr_holdout(model, val, N, n_rel, dev); print(f"[link] after {(mt+mh)/2:.4f}", flush=True)
     eval_conj(model, CV, n_rel, dev, type_mask, "trained")
     torch.save({"model": model.state_dict(), "args": ar, "N": N, "n_rel": n_rel}, f"models/{a.tag}.pt"); print("AND_DONE", round(time.time() - t0), "s", flush=True)

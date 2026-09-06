@@ -605,3 +605,16 @@ Prediction, written first: (a) will improve a lot (the geometry can learn caps: 
 softmin vs < 0.2 for the base table); (b) will improve little or not at all with min, because the
 parsed constraints stay noisy — if (b) beats 19.0 with softmin the constraint noise is smaller
 than lever 9 suggested. Reads: train edges/questions, val, held-out edges. Test / human closed.
+Lever 10 result (30,000 train / 315 val conjunctions, 2.2 constraints, median 2 answers; 1000 steps
+from p_joint, soft-AND loss T=1, 457 s). Synthetic exact-AND val (typed), Hit@1 / Hit@5 / R@20 / MRR:
+  base table   sum 16.5 / 31.8 / 28.4 / 23.7    min 11.1 / 25.4 / 20.2 / 18.1    softmin 12.7 / 25.4 / 21.6 / 19.1
+  AND-trained  sum 32.7 / 51.1 / 47.5 / 41.5    min 28.6 / 44.8 / 40.5 / 36.7    softmin 27.9 / 45.4 / 42.2 / 37.0
+  link MRR 0.568 -> 0.568 (unchanged). Train conjunction loss 3.1 -> 1.35 while held-out plateaued
+  from step 400: memorisation of the training conjunctions.
+GATE FAILED (softmin 27.9 < 50). Stage 3 (STaRK val) not run, as pre-registered.
+Reading: the conjunction loss doubles every readout — the caps get sharper — but the sum stays
+ahead of min / softmin on the trained table too, so the table did not acquire an intersection
+operator; it acquired tighter constraints. The prediction ("(a) will improve a lot, >= 0.5") was
+wrong on the level (0.28) and right on the direction. The exact walk is 100 on this set.
+Not tried: longer / colder (T 0.25) training, learned per-constraint widths (Query2Box on the
+sphere), a larger conjunction set. Recorded as the second negative result on the AND.
