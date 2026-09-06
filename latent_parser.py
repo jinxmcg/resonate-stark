@@ -57,8 +57,10 @@ def main():
     p.add_argument("--model", default="models/p_joint.pt"); p.add_argument("--encoder", default="models/p_joint_enc"); p.add_argument("--tag", default="lp")
     p.add_argument("--train", action="store_true"); p.add_argument("--extra", default="data/para_train.json"); p.add_argument("--epochs", type=int, default=3); p.add_argument("--batch", type=int, default=32)
     p.add_argument("--predict", default=None, help="split to parse (train/val)"); p.add_argument("--queries", default=None); p.add_argument("--out", default=None)
+    p.add_argument("--fold", default=None, help="K:k — train without fold k of K (by train position); with --predict-fold, parse only that fold")
+    p.add_argument("--seed", type=int, default=0); p.add_argument("--labels", default="data/lp_labels.json", help="weak-label cache")
     p.add_argument("--kanc", type=int, default=3); p.add_argument("--sim-floor", type=float, default=None, help="anchor similarity floor (default: tuned on train)"); p.add_argument("--op-thr", type=float, default=0.5)
-    a = p.parse_args(); dev = torch.device("cuda")
+    a = p.parse_args(); dev = torch.device("cuda"); torch.manual_seed(a.seed)
     graph, n_rel = load_model(a.model, dev); E = graph.table().detach()
     d = np.load("data/kg.npz"); names = json.load(open("data/names.json")); node_type = d["node_type"]
     dicts = json.load(open("data/dicts.json")); tn = {int(k): v for k, v in dicts["node_type_dict"].items()}; ktype = {v: k for k, v in tn.items()}
@@ -70,7 +72,15 @@ def main():
         LPt = json.load(open("data/llmparse_train.json")); LPp = json.load(open("data/llmparse_train_para.json"))
         EXTRA = json.load(open(a.extra)) if a.extra else {}
         t0 = time.time(); tr = sp["train"].tolist()
-        data = weak_labels(qa, tr, {}, parser, adj, n_rel, LPt, tn, ktype) + (weak_labels(qa, tr, EXTRA, parser, adj, n_rel, LPp, tn, ktype) if EXTRA else [])
+        if os.path.exists(a.labels):
+            L = json.load(open(a.labels)); data = [(x[0], x[1], x[2], np.array(x[3], np.float32)) for x in L["data"]]; pos_of = L["pos"]
+        else:
+            data = weak_labels(qa, tr, {}, parser, adj, n_rel, LPt, tn, ktype) + (weak_labels(qa, tr, EXTRA, parser, adj, n_rel, LPp, tn, ktype) if EXTRA else [])
+            pos_of = list(range(len(tr))) + (list(range(len(tr))) if EXTRA else [])          # train position of each row (paraphrase rows share it)
+            json.dump({"data": [(x[0], x[1], x[2], x[3].tolist()) for x in data], "pos": pos_of}, open(a.labels, "w"))
+        if a.fold:
+            Kf, kf = (int(x) for x in a.fold.split(":"))
+            data = [x for x, pos in zip(data, pos_of) if pos % Kf != kf]
         n_anc = sum(1 for x in data if x[2]); n_ops = sum(1 for x in data if x[3].sum() > 0)
         print(f"weak labels: {len(data)} questions, {n_anc} with anchors, {n_ops} with a hitting operator ({round(time.time()-t0)} s)", flush=True)
         net = LP(a.encoder, E.shape[1], len(tn), 2 * n_rel, a.kanc).to(dev)
@@ -117,6 +127,8 @@ def main():
     net = LP(a.encoder, E.shape[1], len(tn), 2 * n_rel, ck["kanc"]).to(dev); net.load_state_dict(ck["state"]); net.eval()
     floor = a.sim_floor if a.sim_floor is not None else ck["sim_floor"]
     idx = sp[a.predict].tolist(); QS = json.load(open(a.queries)) if a.queries else {}; out = {}
+    if a.fold and a.predict == "train":                                    # parse only the held-out fold
+        Kf, kf = (int(x) for x in a.fold.split(":")); idx = [i for pos, i in enumerate(idx) if pos % Kf == kf]
     with torch.no_grad():
         for b in range(0, len(idx), 64):
             chunk = idx[b:b + 64]; qs = [QS.get(str(int(qa[i][1])), qa[i][0]) for i in chunk]
