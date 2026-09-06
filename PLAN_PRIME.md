@@ -406,3 +406,10 @@ is 3.1. A learned head trained in four minutes replaces the hand-written parser,
 and the 7B model on the relational path, and reads human-style wording better than all of them.
 Not yet done: the latent parser inside the full pipeline (text + reranker), and the same on train
 for a reranker refit. Box 50038767 left running (user's).
+Seeds (2026-09-06, seeds_chain.sh), val:
+  joint model (3 ep, 1 vector), standalone all entities, plain Hit@1 / MRR | paraphrased | link MRR
+    s0 26.6 / 32.0 | 25.4 / 31.1 | 0.568;  s1 26.9 / 32.4 | 25.7 / 31.4 | 0.569;  s2 26.6 / 32.3 | 26.1 / 31.5 | 0.568
+    mean +- sd: plain 26.7 +- 0.2 / 32.2 +- 0.2; paraphrased 25.7 +- 0.4 / 31.3 +- 0.2; link 0.568 +- 0.001
+  latent parser + bge fallback, relational path, plain Hit@1 / MRR | paraphrased
+    s0 25.1 / 33.0 | 22.7 / 30.3;  s1 25.3 / 33.2 | 22.0 / 29.8;  s2 26.3 / 33.8 | 22.3 / 30.0
+    mean +- sd: plain 25.6 +- 0.6 / 33.3 +- 0.4; paraphrased 22.3 +- 0.4 / 30.0 +- 0.3   (7B path: 24.9 / 20.9)
