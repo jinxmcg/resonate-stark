@@ -330,3 +330,13 @@ With honest features, text-to-latent is the largest single lever in P2: +7.3 Hit
 paraphrased, +7.7 MRR; Recall@20 +6.7. The phrasing gap stays ~3 Hit@1. The in-sample version had
 shown -2.2: the failure was the fit, not the source. All val; test / test-0.1 / human unopened.
 Pending: the same with the JOINT (edges + questions) model's out-of-fold rankings (joint_oof_chain.sh).
+Joint (edges + questions) model as the third source, out-of-fold fit (joint_oof_chain.sh; 5 folds,
+51-83 s each; RRF w 0.45 from train); end to end through predict.py, val:
+                                              plain val                      paraphrased val
+  reranker without text-to-latent             35.6 / 60.0 / 69.8 / 46.8        31.9 / 55.6 / 66.0 / 42.8
+  + questions-only text-to-latent (t2lj)      42.4 / 67.3 / 75.2 / 53.9 (w .5) 39.5 / 62.5 / 71.5 / 50.5 (w .5)
+  + JOINT text-to-latent (p_joint) [P2 FINAL] 43.5 / 67.4 / 75.7 / 54.7        40.6 / 63.3 / 71.9 / 51.3
+P2 FINAL pipeline: retrieve.py (base table, beta 30, bge anchors, LLM-override parse) + bge_ft2 text
++ p_joint text-to-latent (t2l_rank.py) + RRF w 0.45 + per-type reranker data/rerank_llm_ancf_bgeft2_pjoint_aug_oof.json.
+vs P1 (26.8 / 49.7 / 58.4 / 37.3 plain; 22.5 / 46.1 / 54.3 / 33.3 paraphrased): +16.7 / +18.1 Hit@1.
+Phrasing gap 2.9 Hit@1. Second committed read: NOT made (user's call). Box 50038767 idle, kept up.
