@@ -8,7 +8,7 @@
 - **Model type:** Others
 - **Code repository:** https://github.com/jinxmcg/resonate-stark
 - **Hardware:** 1x NVIDIA RTX 5090 (training and inference)
-- **Paper:** ResonatE: Row-Sparse Knowledge-Graph Embeddings with Composable Relation Operators
+- **Paper:** Beyond Link Prediction: Compact Knowledge Representations for Prediction, Retrieval, and Direct Access (ResonatE)
   (https://github.com/jinxmcg/resonate, paper/resonate.pdf; STaRK section)
 - **Prediction files:** results_p2/eval_results_test.csv, results_p2/eval_results_test-0.1.csv,
   results_p2/eval_results_human_generated_eval.csv (columns idx, query_id, pred_rank = top-100 node ids)
