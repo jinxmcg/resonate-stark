@@ -16,7 +16,7 @@ fusion step can combine them with the text retriever without re-scoring.
 Usage: uv run python retrieve.py --model models/p_k12b4_12k.pt [--split val] [--limit N]
 """
 import os, argparse, json, re, sys, time, collections
-import numpy as np, torch
+import numpy as np, torch, torch.nn.functional as F
 import scipy.sparse as sps
 sys.path[:0] = ["/mnt/geocore/resonate", os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib")]   # shared modules on jinx, or prime/lib on a rented box
 from resonate_wiki import SparseTableResonatE
@@ -186,7 +186,7 @@ class Adjacency:
 
 
 @torch.no_grad()
-def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, adj=None, beta=0.0, feats=False, no_model=False, logdeg=None):
+def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, adj=None, beta=0.0, feats=False, no_model=False, logdeg=None, agg="sum", agg_p=1.0):
     at_idx, ments = parsed
     if at is None or not ments:
         return ([], None) if feats else []
@@ -196,6 +196,7 @@ def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, a
         mask &= ~exclude
     total = torch.zeros(E.shape[0], device=dev)
     exact = torch.zeros(E.shape[0], device=dev)
+    per_mention = []                                      # best chain score per mention (for the AND readouts)
     for (i, n, mt, w) in ments:
         best = None
         if adj is not None and beta > 0:
@@ -216,6 +217,12 @@ def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, a
             zs = zs * wt
             best = zs if best is None else torch.maximum(best, zs)
         total += best
+        if best is not None: per_mention.append(best)
+    if agg != "sum" and len(per_mention) >= 2:           # AND over mentions of (OR over chains): one stacked tensor, one reduction
+        S = torch.stack(per_mention)                      # (k, N)
+        if agg == "min": total = S.min(0).values
+        elif agg == "softmin": total = -agg_p * torch.logsumexp(-S / agg_p, 0)
+        elif agg == "logsig": total = F.logsigmoid(S - agg_p).sum(0)
     total = total + beta * exact
     if no_model and logdeg is not None:
         total = total + 1e-3 * logdeg
@@ -240,6 +247,8 @@ def main():
     p.add_argument("--queries", default=None, help="json {query_id: text} replacing the question text (paraphrase proxy; train/val only)")
     p.add_argument("--llm-parse", default=None, help="data/llmparse_<tag>.json from llm_parse.py: answer type fallback, relation hints, entity names, exclusion")
     p.add_argument("--lparse", default=None, help="latent parser output (latent_parser.py): answer type, anchor ids, operator ids per query; replaces the regex/LLM parse (exact-name mentions kept as fallback)")
+    p.add_argument("--agg", default="sum", choices=["sum", "min", "softmin", "logsig"], help="how mention scores combine: sum (OR-ish) or an AND readout")
+    p.add_argument("--agg-p", type=float, default=1.0, help="tau for softmin, c for logsig")
     p.add_argument("--no-model", action="store_true", help="ablation: drop the ResonatE score entirely; rank by exact-support count only (ties by node degree)")
     p.add_argument("--llm-override-type", action="store_true", help="let the LLM answer type override the pattern one (default: fallback only)")
     p.add_argument("--dump-feats", action="store_true", help="also store per-candidate z-sum and exact count (reranker features)")
@@ -273,7 +282,7 @@ def main():
     LPZ = json.load(open(a.lparse)) if a.lparse else None
     rel_ids = {v: int(k) for k, v in dicts["edge_type_dict"].items()}
     type_ok = set(tn.values()); n_llm_type = n_llm_ent = 0
-    rows_all, rows_cov, out, n_cov, n_type, t0 = [], [], {}, 0, 0, time.time()
+    rows_all, rows_cov, out, n_cov, n_type, t0 = [], [], {}, 0, 0, time.time(); rows_multi, rows_single = [], []
     for j, i in enumerate(idx):
         q, qid, ans, _ = qa[i]
         if QS is not None: q = QS.get(str(int(qid)), q)
@@ -336,7 +345,7 @@ def main():
         if neg is None and lp.get("exclude_relation") in rel_ids:
             neg = rel_ids[lp["exclude_relation"]]
         excl = torch.from_numpy(deg[neg] > 0).to(dev) if neg is not None else None
-        top = score_query(model, n_rel, (at, ments), at, type_mask, dev, exclude=excl, adj=adj, beta=a.beta, feats=a.dump_feats, no_model=a.no_model, logdeg=logdeg_all)
+        top = score_query(model, n_rel, (at, ments), at, type_mask, dev, exclude=excl, adj=adj, beta=a.beta, feats=a.dump_feats, no_model=a.no_model, logdeg=logdeg_all, agg=a.agg, agg_p=a.agg_p)
         fe = None
         if a.dump_feats:
             top, fe = top
@@ -347,6 +356,7 @@ def main():
             rows_all.append(m)
             if top:
                 rows_cov.append(m)
+            (rows_multi if len({i_ for i_, _, _, _ in ments}) >= 2 else rows_single).append(m)
         out[int(qid)] = {"top": top[:100], "answer_type": at, "mentions": [(i_, n_, mt) for (i_, n_, mt, w) in ments], "negation": neg}
         if fe is not None:
             out[int(qid)]["feats"] = fe
@@ -357,6 +367,8 @@ def main():
         print("relational-only, all queries (uncovered count as misses):", {k: round(v, 4) for k, v in summarize(rows_all).items()})
     if rows_cov:
         print("relational-only, covered queries:", {k: round(v, 4) for k, v in summarize(rows_cov).items()})
+    if rows_multi:
+        print(f"  >= 2 mentions (n={len(rows_multi)}):", {k: round(v, 4) for k, v in summarize(rows_multi).items()}, f"| 1 mention (n={len(rows_single)}):", {k: round(v, 4) for k, v in summarize(rows_single).items()})
     json.dump(out, open(a.out or f"data/rel_{a.split}.json", "w"))
 
 

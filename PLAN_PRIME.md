@@ -536,3 +536,19 @@ mostly an under-tuned control and is retracted; the tuned gap of 4-6 Hit@1 stand
 paper is therefore "this table takes a language projection better than a RotatE table under the same
 recipe", not "only this table can". RotatE's own distance readout is worse than an inner product on
 its own table for this use (16.7 vs 21.2 joint), so the readout matters too.
+
+## Lever 9 pre-registration (2026-09-06, before any run) — an AND in the space
+Today score_query sums, over the parsed mentions, the best (max over chains) standardised operator
+score: OR-ish. The AND readout keeps every cost the same (one matmul with the k mention vectors, then
+a reduction): score(t) = agg_i max_chain z_i(t), with agg in
+  sum        (current),
+  min        (exact intersection of caps on the sphere),
+  softmin    (-tau * logsumexp(-z_i / tau), tau in {0.5, 1, 2}),
+  logsig     (sum_i log sigmoid(z_i - c), c in {0, 1}: a calibrated product-of-probabilities AND).
+Single-mention questions are unaffected by construction. Measured on val (plain + paraphrased),
+MODEL ONLY (beta 0, no walk), LLM-override parse + bge anchors as in the walk-vs-model test, all
+queries; also broken down by number of mentions (1 vs >= 2), where the AND can act. References:
+model-only sum 19.0 / 19.3 plain / (para from rel_val_para_llm...), walk-only 18.9, both 24.9.
+Then the best AND with the walk (beta 30), to see whether it also helps the full relational path.
+Success = model-only AND > walk-only (18.9) on plain val. No parameter is fit; tau / c are a
+2-3 point grid reported in full. Reads: val. Test / human closed.
