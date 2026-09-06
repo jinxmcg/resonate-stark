@@ -557,3 +557,10 @@ plain): a name that resolves to several entities contributes one mention per res
 demanded all resolutions of one name at once. Corrected before the remaining readouts ran: OR over a
 name's resolutions and chains (max), AND across distinct names. The breakdown is now by number of
 distinct names. sum result is unchanged by the fix (19.0 / 16.6).
+Lever 9, corrected min (AND across names): model only, plain val 13.3 / 22.5 / 27.1 / 17.7 (sum: 19.0);
+>= 2-name questions 9.6 Hit@1 vs 18.9 with the sum; 1-name questions identical by construction.
+An exact AND over the parsed names hurts: the parsed constraint set is noisy (spurious name
+matches, LLM entity names that are context rather than constraints), and one wrong constraint
+vetoes the answer. The walk does NOT use a hard AND either: beta * exact is a COUNT of satisfied
+constraints. Added agg "count" (soft count of satisfied caps, 30 * sum_i sigmoid((z_i - c)/0.5) +
+sum_i z_i; c in {1,2,3}) — the walk's rule, in the space — queued as lever 9b.

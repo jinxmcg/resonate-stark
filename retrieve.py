@@ -223,6 +223,8 @@ def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, a
         if agg == "min": total = S.min(0).values
         elif agg == "softmin": total = -agg_p * torch.logsumexp(-S / agg_p, 0)
         elif agg == "logsig": total = F.logsigmoid(S - agg_p).sum(0)
+        elif agg == "count":                              # soft count of satisfied caps (what the walk's exact-support count does, in the space) + the sum for ordering
+            total = 30.0 * torch.sigmoid((S - agg_p) / 0.5).sum(0) + S.sum(0)
     total = total + beta * exact
     if no_model and logdeg is not None:
         total = total + 1e-3 * logdeg
@@ -247,7 +249,7 @@ def main():
     p.add_argument("--queries", default=None, help="json {query_id: text} replacing the question text (paraphrase proxy; train/val only)")
     p.add_argument("--llm-parse", default=None, help="data/llmparse_<tag>.json from llm_parse.py: answer type fallback, relation hints, entity names, exclusion")
     p.add_argument("--lparse", default=None, help="latent parser output (latent_parser.py): answer type, anchor ids, operator ids per query; replaces the regex/LLM parse (exact-name mentions kept as fallback)")
-    p.add_argument("--agg", default="sum", choices=["sum", "min", "softmin", "logsig"], help="how mention scores combine: sum (OR-ish) or an AND readout")
+    p.add_argument("--agg", default="sum", choices=["sum", "min", "softmin", "logsig", "count"], help="how mention scores combine: sum (OR-ish) or an AND readout")
     p.add_argument("--agg-p", type=float, default=1.0, help="tau for softmin, c for logsig")
     p.add_argument("--no-model", action="store_true", help="ablation: drop the ResonatE score entirely; rank by exact-support count only (ties by node degree)")
     p.add_argument("--llm-override-type", action="store_true", help="let the LLM answer type override the pattern one (default: fallback only)")
