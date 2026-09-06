@@ -524,3 +524,15 @@ Lever 8 sweep (scripts/lever8_sweep.sh; chosen by held-out LINK MRR only): lr 3e
   (ResonatE frozen:      19.7 / 30.7 / 31.8 / 25.2 plain    19.3 / 29.8 / 30.6 / 24.6)
 So much of the first gap WAS the under-tuned control: at near-equal link quality the frozen gap is
 ~4 Hit@1 (20% relative), not half. Joint on the tuned RotatE table: pending (below).
+Joint on the tuned RotatE table (lr 3e-3; 3 epochs, edges + questions, same as ResonatE's joint):
+  distance readout       16.7 / 29.0 / 30.7 / 22.6 plain    16.5 / 28.0 / 30.4 / 22.2 paraphrased   link 0.549 -> 0.550
+  inner-product readout  21.2 / 33.8 / 32.4 / 27.2 plain    20.5 / 32.7 / 30.9 / 26.3 paraphrased   link 0.549 -> 0.552
+  (ResonatE joint:       26.9 / 37.9 / 35.4 / 32.2 plain    25.4 / 37.4 / 34.2 / 31.1 paraphrased   link 0.557 -> 0.570)
+LEVER 8 CONCLUSION (one seed each, one dataset, RotatE L2 variant tuned by link MRR): with the
+identical projector, ResonatE's table takes language better than a RotatE table of the same width
+and near-equal link quality: frozen 19.7 vs 15.8 Hit@1 (+3.9), joint 26.9 vs 21.2 (+5.7), and joint
+training raises ResonatE's link MRR by 0.013 against 0.003 for RotatE. The first-pass gap of 2x was
+mostly an under-tuned control and is retracted; the tuned gap of 4-6 Hit@1 stands. The claim in the
+paper is therefore "this table takes a language projection better than a RotatE table under the same
+recipe", not "only this table can". RotatE's own distance readout is worse than an inner product on
+its own table for this use (16.7 vs 21.2 joint), so the readout matters too.

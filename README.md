@@ -157,6 +157,16 @@ and the text ranker are present; its contribution enters through the candidate o
 all, through the language readout, which is the largest single lever in the pipeline
 (+8 Hit@1 with honest, out-of-fold features).
 
+**Is it the table, or would any table do?** (a reviewer's test) RotatE was trained on the same graph
+at the same width (288 numbers per entity) under the same regime, tuned by held-out link MRR only
+(0.549 vs ResonatE's 0.557), and the identical projector was trained on top of both tables, frozen
+and jointly. Frozen: RotatE 15.8 Hit@1 (inner-product readout; 15.5 with its own distance readout)
+vs ResonatE 19.7. Joint: RotatE 21.2 vs ResonatE 26.9, and joint training raised RotatE's link MRR by
+0.003 against 0.013 for ResonatE. One seed each, one dataset, RotatE's L2 variant; our first pass
+with an untuned RotatE showed a 2x gap, which was mostly the control and is retracted in
+`PLAN_PRIME.md`. The honest claim: this table takes a language projection better than a RotatE
+table under the same recipe, not that only this table can.
+
 **What did not work**, all on validation: fine-tuning the text encoder for anchor resolution
 (worse: the fine-tune points a question at its answer, not at the entity it names); the model's
 raw score as a reranker feature (no gain); text-to-latent with in-sample training features
