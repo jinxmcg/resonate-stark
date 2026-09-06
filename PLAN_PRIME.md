@@ -564,3 +564,20 @@ matches, LLM entity names that are context rather than constraints), and one wro
 vetoes the answer. The walk does NOT use a hard AND either: beta * exact is a COUNT of satisfied
 constraints. Added agg "count" (soft count of satisfied caps, 30 * sum_i sigmoid((z_i - c)/0.5) +
 sum_i z_i; c in {1,2,3}) — the walk's rule, in the space — queued as lever 9b.
+Lever 9 result (all val; model only unless noted; AND across names, OR within a name):
+  readout                     plain all / >= 2 names / 1 name      paraphrased all
+  sum (current)               19.0 / 18.9 / 19.0                     16.6
+  min (exact AND)             13.3 /  9.6 / 19.0                     12.3
+  softmin tau 0.5 / 1 / 2     13.8 / 15.0 / 15.9                     12.7 / 13.4 / 14.1
+  logsig c 0 / 1              15.0 / 14.9                            13.4 / 13.4
+  soft count c 1 / 2 / 3      15.8 / 15.4 / 16.5  (>= 2 names: 13.8 / 13.0 / 14.8)   13.9 / 14.0 / 15.2
+  with the walk (beta 30): sum 24.9, min 22.8, softmin 23.4 (paraphrased 20.9 / 19.5 / 19.8)
+CONCLUSION: no inference-time AND readout beats the sum on this constraint set; every AND-like
+combination loses on multi-name questions and is neutral on single-name ones by construction. Two
+causes, separable: (i) the single-hop table was never trained for conjunctions, so per-constraint
+scores are not calibrated as memberships; (ii) the parsed constraint set is noisy and any AND
+lets a wrong constraint veto. The walk's advantage is not an AND either — it is exact membership
+plus a count. Next (lever 10, not yet pre-registered in detail): TRAIN the joint model on sampled
+conjunctive queries (2-3 anchors + chains, answers = exact intersections from the training graph)
+with a soft-AND readout in the loss; judge the geometry on a synthetic exact-AND set (no parser
+noise) and on val with the same parse; add a "is this a constraint" head to the parser.
