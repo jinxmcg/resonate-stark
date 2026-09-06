@@ -14,7 +14,25 @@ import stark_shim  # noqa
 from stark_qa import load_qa
 from transformers import AutoTokenizer, AutoModel
 from metrics import stark_metrics, summarize
-from train_prime import load_kg, mrr_holdout
+from train_prime import load_kg
+
+
+@torch.no_grad()
+def mrr_holdout(model, val, N, n_rel, dev, n=5000, negs=500, seed=123, chunk=250):
+    """train_prime.mrr_holdout, chunked (the one-shot version needs ~3 GB and shares the card)."""
+    h, r, t = val; rng = np.random.default_rng(seed)
+    idx = rng.choice(len(h), size=min(n, len(h)), replace=False); out = []
+    for rev in (False, True):
+        src = torch.from_numpy(t[idx] if rev else h[idx]).to(dev); dst = torch.from_numpy(h[idx] if rev else t[idx]).to(dev)
+        rel = torch.from_numpy(r[idx] + (n_rel if rev else 0)).to(dev); ng = torch.from_numpy(rng.integers(0, N, size=(len(idx), negs))).to(dev)
+        rr = []
+        for b in range(0, len(idx), chunk):
+            z = model.out(model.hop(model.embed(src[b:b+chunk]), rel[b:b+chunk]), rel[b:b+chunk])
+            sp = torch.real((z * model.rows(dst[b:b+chunk]).conj()).sum(-1)) * model.log_tau.exp()
+            sn = torch.real((z[:, None, :] * model.rows(ng[b:b+chunk]).conj()).sum(-1)) * model.log_tau.exp()
+            rr.append(1.0 / (1 + (sn > sp[:, None]).sum(1)).float())
+        out.append(torch.cat(rr).mean().item())
+    return out
 from text2latent import T2L, QPRE
 
 
@@ -96,12 +114,12 @@ def main():
             if step % 100 == 0: print(f"ep {ep} step {step}/{steps} edge {loss_e.item():.3f} question {loss_q.item():.3f} {round(time.time()-t0)} s", flush=True)
         print(f"epoch {ep} mean edge loss {le/nb:.3f} question loss {lq/nb:.3f}", flush=True)
     model.eval(); net.eval()
+    torch.save({"model": model.state_dict(), "args": ar, "N": N, "n_rel": n_rel}, f"models/{a.tag}.pt")     # save BEFORE any evaluation
+    torch.save({"head": net.head.state_dict(), "scale": net.scale.detach().cpu(), "encoder": f"models/{a.tag}_enc", "E": None}, f"models/{a.tag}_head.pt")
+    net.enc.save_pretrained(f"models/{a.tag}_enc"); tok.save_pretrained(f"models/{a.tag}_enc")
     mt, mh = mrr_holdout(model, val, N, n_rel, dev); print(f"[link] joint table: held-out MRR tail {mt:.4f} head {mh:.4f} mean {(mt+mh)/2:.4f}", flush=True)
     E = model.table().detach()
     qa_eval(net, tok, E, qa, sp, dev, node_type, ktype, "joint")
-    torch.save({"model": model.state_dict(), "args": ar, "N": N, "n_rel": n_rel}, f"models/{a.tag}.pt")
-    torch.save({"head": net.head.state_dict(), "scale": net.scale.detach().cpu(), "encoder": f"models/{a.tag}_enc", "E": None}, f"models/{a.tag}_head.pt")
-    net.enc.save_pretrained(f"models/{a.tag}_enc"); tok.save_pretrained(f"models/{a.tag}_enc")
     print("JOINT_DONE", round(time.time() - t0), "s", flush=True)
 
 

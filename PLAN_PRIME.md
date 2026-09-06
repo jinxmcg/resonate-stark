@@ -306,3 +306,11 @@ Measured, all on val / held-out edges:
       table vs the base table (24.9 Hit@1) — does the walk+model path keep working on the new table.
 Success = link MRR within 0.02 of base AND QA >= t2lj (26.2 / 25.4). Reads: train, val, held-out
 edges. test / test-0.1 / human closed.
+Lever 5 result (joint_train.py, 3 question epochs = 1158 steps, each with one 2048-edge batch, 292 s):
+  held-out link MRR: base table 0.5574; questions-only table (t2lj) 0.5572; edges+questions table 0.5680
+  QA, text-to-latent alone:        plain val 26.6 / 37.9 / 35.4 / 32.0    paraphrased 25.4 / 37.6 / 34.2 / 31.1
+  (questions-only t2lj, for reference: 26.2 / 37.8 / 35.2 / 31.7          25.4 / 37.2 / 34.0 / 31.0)
+Pre-registered success (link MRR within 0.02 of base AND QA >= t2lj): MET. One table now answers
+graph queries (link MRR up 0.011 from the extra edge steps) and language questions (26.6 Hit@1 from
+the question alone, phrasing gap 1.2) with the same readout. Retrieval check with the joint table
+(walk + model path) pending.
