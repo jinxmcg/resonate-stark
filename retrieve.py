@@ -69,7 +69,7 @@ def load_model(path, dev):
 
 
 class Parser:
-    def __init__(self, names, node_type, type_names, sigs, min_len=4, short_symbols=True):
+    def __init__(self, names, node_type, type_names, sigs, min_len=4, short_symbols=True, aliases=None):
         self.node_type = node_type; self.tn = type_names
         self.by_name = collections.defaultdict(list)
         self.by_symbol = collections.defaultdict(list)      # P3 fix: 2-3 character gene/protein symbols (GCK, TTR, ...) — matched only by the uppercase-symbol rule
@@ -80,6 +80,10 @@ class Parser:
                 self.by_name[n].append(int(i))
             elif short_symbols and 2 <= len(n) < min_len and n.isalnum() and not n.isdigit() and int(node_type[int(i)]) in gene_t:
                 self.by_symbol[n].append(int(i))
+        if aliases:                                          # P4 lever A: aliases resolve like names (never overriding an exact name)
+            for a_, ids in aliases.items():
+                if len(a_) >= min_len and a_ not in self.by_name: self.by_name[a_] = list(ids)
+                elif short_symbols and 2 <= len(a_) < min_len and a_ not in self.by_symbol and a_ not in self.by_name: self.by_symbol[a_] = list(ids)
         self.names_sorted = sorted(self.by_name, key=len, reverse=True)
         # (mention type, answer type) -> set of (rel, direction)   direction 0: mention --r--> answer
         self.ops = collections.defaultdict(set)
@@ -257,6 +261,7 @@ def main():
     p.add_argument("--lparse", default=None, help="latent parser output (latent_parser.py): answer type, anchor ids, operator ids per query; replaces the regex/LLM parse (exact-name mentions kept as fallback)")
     p.add_argument("--agg", default="sum", choices=["sum", "min", "softmin", "logsig", "count"], help="how mention scores combine: sum (OR-ish) or an AND readout")
     p.add_argument("--agg-p", type=float, default=1.0, help="tau for softmin, c for logsig")
+    p.add_argument("--aliases", default=None, help="data/aliases.json from build_aliases.py (P4 lever A)")
     p.add_argument("--legacy-names", action="store_true", help="P1/P2 behaviour: no 2-3 character gene symbols (reproduces the committed reads)")
     p.add_argument("--no-model", action="store_true", help="ablation: drop the ResonatE score entirely; rank by exact-support count only (ties by node degree)")
     p.add_argument("--llm-override-type", action="store_true", help="let the LLM answer type override the pattern one (default: fallback only)")
@@ -268,7 +273,7 @@ def main():
     names = json.load(open("data/names.json")); d = np.load("data/kg.npz"); node_type = d["node_type"]
     dicts = json.load(open("data/dicts.json")); tn = {int(k): v for k, v in dicts["node_type_dict"].items()}
     sigs = json.load(open("data/signatures.json"))
-    parser = Parser(names, node_type, tn, sigs, short_symbols=not a.legacy_names)
+    parser = Parser(names, node_type, tn, sigs, short_symbols=not a.legacy_names, aliases=json.load(open(a.aliases)) if a.aliases else None)
     if a.no_2hop:
         parser.ops2 = {}
     type_mask = {t: torch.from_numpy(node_type == i).to(dev) for i, t in tn.items()}

@@ -692,3 +692,20 @@ user's request ("do not open, I really want a clean win"). The files stay sealed
 box 50098239 and the status log is not read. It still counts as a read of the test splits (the
 third) and is disclosed as such. Development continues on val only (P4); the sealed P3 files are
 either reported next to the final read or discarded unopened, never used to decide anything.
+
+## P4 pre-registration (2026-09-07, before any run) — val only; one read at the very end
+From the proxy error analysis: entity resolution under rewording is the dominant loss (aliases,
+full names, descriptions), ranking second. Levers, each measured on plain and paraphrased val:
+ A. Alias-aware anchoring. The node text carries, for genes, an alias list (14,213 genes) and the
+    full gene name ("glucokinase" for GCK); build data/aliases.json {alias -> ids} from them
+    (build_aliases.py; aliases of length >= 3, at most 3 ids per alias, an alias never overrides an
+    exact name of a different entity) and let the parser resolve aliases like names. Expected:
+    +1-2 Hit@1 on the relational path, more on paraphrased than plain.
+ B. Reading selector: several deterministic readings per question, a small classifier fit on train
+    + paraphrased train (out-of-fold) choosing among them from parse-confidence features; oracle
+    best-of-readings on val measured first, the selector built only if that bound is worth it.
+ C. Cleaner and harder paraphrases: drop the 1.3-1.5% CJK-corrupted rewrites; add a terse /
+    clinical style; refit the embedder and reranker on them.
+Reads: train (fitting), val (all decisions). test / test-0.1 / human_generated_eval: closed; one
+committed read of the final P4 pipeline at the end, the fourth read overall, reported next to P1,
+P2 and the sealed P3.
