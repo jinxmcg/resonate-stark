@@ -392,3 +392,17 @@ Measured on plain and paraphrased val, relational-only (uncovered = miss):
   references: regex parser 24.6 / 19.3; regex + 7B override 24.9 / 20.9; full pipeline 43.5 / 40.6.
   success = latent parser >= 7B-override path on plain AND a smaller phrasing gap than 4.0.
 Reads: train, val. test / test-0.1 / human closed. Box: ask the user before using the NL 5090.
+Lever 7 result (latent_parser.py on the p_joint encoder; weak labels 12,324 questions, 11,194 with
+anchors, 8,364 with a hitting operator, 174 s; training 230 s; anchor floor tuned on train 14.92,
+anchor F1 0.81 on train). Relational path on val (walk + model, beta 30), uncovered = miss:
+                                        plain val                     paraphrased val          gap
+  regex parser                          24.6 / 41.6 / 50.0 / 32.6      19.3 / 34.4 / 42.1 / 26.4   5.3
+  regex + 7B override                   24.9 / 40.4 / 48.8 / 32.1      20.9 / 36.9 / 45.5 / 28.5   4.0
+  latent parser alone                   24.5 / 40.3 / 48.0 / 31.8      21.4 / 36.6 / 44.3 / 28.5   3.1
+  latent parser + bge anchor fallback   25.1 / 42.2 / 50.4 / 33.0      22.7 / 38.8 / 47.1 / 30.3   2.4
+Coverage: 95.2% / 92.5% alone, 100% with the fallback. Pre-registered bar (>= 7B path on plain AND
+gap < 4.0): met with the fallback (25.1 >= 24.9, gap 2.4); alone, plain is -0.4 (noise) and the gap
+is 3.1. A learned head trained in four minutes replaces the hand-written parser, the keyword map
+and the 7B model on the relational path, and reads human-style wording better than all of them.
+Not yet done: the latent parser inside the full pipeline (text + reranker), and the same on train
+for a reranker refit. Box 50038767 left running (user's).
