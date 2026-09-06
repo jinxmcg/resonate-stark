@@ -64,6 +64,7 @@ def main():
     p.add_argument("--ebatch", type=int, default=2048); p.add_argument("--neg", type=int, default=4096); p.add_argument("--lam", type=float, default=0.1)
     p.add_argument("--lr-table", type=float, default=1e-3); p.add_argument("--lr-ops", type=float, default=1e-4); p.add_argument("--lr-enc", type=float, default=2e-5); p.add_argument("--lr-head", type=float, default=1e-3)
     p.add_argument("--wq", type=float, default=1.0, help="weight of the question loss"); p.add_argument("--tag", default="p_joint"); p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--fold", default=None, help="K:k — train without fold k of K (by train position); rank only that fold, plain + paraphrased, to data/oof/<tag>_f<k>[_para].json")
     p.add_argument("--eval-table", default=None, help="only measure held-out link MRR of the table stored in this text2latent checkpoint")
     a = p.parse_args(); dev = torch.device("cuda"); torch.manual_seed(a.seed)
     N, n_rel, (h, r, t), val, node_type_np = load_kg()
@@ -80,9 +81,12 @@ def main():
     tn = {int(k): v for k, v in json.load(open("data/dicts.json"))["node_type_dict"].items()}; ktype = {v: k for k, v in tn.items()}
     tok = AutoTokenizer.from_pretrained(a.encoder); net = T2L(a.encoder, model.m).to(dev)
     qa = load_qa("prime"); sp = qa.get_idx_split(); EXTRA = json.load(open(a.extra)) if a.extra else {}
-    train = []
-    for i in sp["train"].tolist():
-        q, qid, ans, _ = qa[i]; train.append((q, ans))
+    train, held = [], []
+    K, k = (int(x) for x in a.fold.split(":")) if a.fold else (0, -1)
+    for pos, i in enumerate(sp["train"].tolist()):
+        q, qid, ans, _ = qa[i]
+        if a.fold and pos % K == k: held.append(i); continue
+        train.append((q, ans))
         if str(int(qid)) in EXTRA: train.append((EXTRA[str(int(qid))], ans))
     print("questions (incl. paraphrases):", len(train), "| train edges:", len(h), flush=True)
     h, r, t = (torch.from_numpy(x).to(dev) for x in (h, r, t)); gen = torch.Generator(device=dev); gen.manual_seed(a.seed)
@@ -114,6 +118,18 @@ def main():
             if step % 100 == 0: print(f"ep {ep} step {step}/{steps} edge {loss_e.item():.3f} question {loss_q.item():.3f} {round(time.time()-t0)} s", flush=True)
         print(f"epoch {ep} mean edge loss {le/nb:.3f} question loss {lq/nb:.3f}", flush=True)
     model.eval(); net.eval()
+    if a.fold:
+        os.makedirs("data/oof", exist_ok=True); E = model.table().detach()
+        for suf, QS in (("", {}), ("_para", EXTRA)):
+            out = {}
+            for b in range(0, len(held), 64):
+                chunk = held[b:b + 64]
+                with torch.no_grad():
+                    enc = tok([QPRE + QS.get(str(int(qa[i][1])), qa[i][0]) for i in chunk], return_tensors="pt", padding=True, truncation=True, max_length=128).to(dev)
+                    top = torch.topk(net.score(net(enc), E), 100, 1).indices.cpu().numpy()
+                for rr, i in enumerate(chunk): out[int(qa[i][1])] = top[rr].tolist()
+            json.dump(out, open(f"data/oof/{a.tag}_f{k}{suf}.json", "w"))
+        print("OOF_DONE", k, len(held), round(time.time() - t0), "s", flush=True); return
     torch.save({"model": model.state_dict(), "args": ar, "N": N, "n_rel": n_rel}, f"models/{a.tag}.pt")     # save BEFORE any evaluation
     torch.save({"head": net.head.state_dict(), "scale": net.scale.detach().cpu(), "encoder": f"models/{a.tag}_enc", "E": None}, f"models/{a.tag}_head.pt")
     net.enc.save_pretrained(f"models/{a.tag}_enc"); tok.save_pretrained(f"models/{a.tag}_enc")

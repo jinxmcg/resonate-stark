@@ -317,3 +317,16 @@ the question alone, phrasing gap 1.2) with the same readout. Retrieval check wit
 Retrieval check with the joint table (retrieve.py, LLM override, bge anchors), val:
   walk + model   base table 24.9 / 40.4 / 48.8 / 32.1   joint table 24.3 / 40.6 / 49.0 / 32.2   (intact)
   model only     base table 19.0 / 33.3 / 40.9 / 25.8   joint table 17.9 / 32.9 / 40.1 / 25.3   (-1.1 Hit@1)
+
+### Out-of-fold fix, results (2026-09-06; oof_chain.sh; 5-fold text-to-latent (questions-only, t2lj
+recipe) and 5-fold bge fine-tune give every train question a ranking from a model that never saw it;
+reranker fit on those; val features from the full models; LLM-override retrieval, bge_ft2 text)
+                                              plain val                      paraphrased val
+  reranker without text-to-latent             35.1 / 59.0 / 68.5 / 46.2        31.6 / 54.6 / 64.4 / 42.3
+  reranker WITH out-of-fold text-to-latent    42.4 / 67.3 / 75.2 / 53.9        39.5 / 62.5 / 71.5 / 50.5
+(rerank.py's internal val eval of the same fit: 43.2 / 67.5 / 75.4 / 54.5 — it uses the train-chosen
+RRF w 0.45 from fusion_bgeft2.json; predict.py above used w 0.5. Use 0.45 from here on.)
+With honest features, text-to-latent is the largest single lever in P2: +7.3 Hit@1 plain, +7.9
+paraphrased, +7.7 MRR; Recall@20 +6.7. The phrasing gap stays ~3 Hit@1. The in-sample version had
+shown -2.2: the failure was the fit, not the source. All val; test / test-0.1 / human unopened.
+Pending: the same with the JOINT (edges + questions) model's out-of-fold rankings (joint_oof_chain.sh).
