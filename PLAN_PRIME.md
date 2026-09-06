@@ -363,3 +363,10 @@ Longer training with a second paraphrase set does not: Hit@1 flat, Recall@20 dow
 loss ~0.1: the head overfits the train answer sets). The recall ceiling (~36) is not the vector
 count or the data; it is the single-readout formulation (no exact AND over constraints) — the
 latent parser is the next lever. Pipeline test: out-of-fold p_jointv4 rankings + reranker (running).
+Pipeline test of the 4-vector model (out-of-fold, same reranker recipe, w 0.45), val:
+  third source = p_joint   (1 vector)   plain 43.5 / 67.4 / 75.7 / 54.7   paraphrased 40.6 / 63.3 / 71.9 / 51.3
+  third source = p_jointv4 (4 vectors)  plain 43.2 / 68.0 / 76.1 / 54.8   paraphrased 39.9 / 63.7 / 71.9 / 51.0
+Tied within noise (Hit@1 -0.3 / -0.7, Hit@5 and R@20 +0.4 to +0.6): the standalone gain of the
+4-vector head does not carry into the pipeline, where the exact walk already supplies what the
+extra vectors add. P2 FINAL stays the p_joint pipeline. Lever 6 closed; next lever = latent parser.
+Box 50038767 left running per the user (they will use it).
