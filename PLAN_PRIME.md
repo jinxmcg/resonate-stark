@@ -552,3 +552,8 @@ model-only sum 19.0 / 19.3 plain / (para from rel_val_para_llm...), walk-only 18
 Then the best AND with the walk (beta 30), to see whether it also helps the full relational path.
 Success = model-only AND > walk-only (18.9) on plain val. No parameter is fit; tau / c are a
 2-3 point grid reported in full. Reads: val. Test / human closed.
+Lever 9, first pass (AND over MENTIONS): min collapses on >= 2-mention questions (Hit@1 18.7 -> 8.6,
+plain): a name that resolves to several entities contributes one mention per resolution, so the min
+demanded all resolutions of one name at once. Corrected before the remaining readouts ran: OR over a
+name's resolutions and chains (max), AND across distinct names. The breakdown is now by number of
+distinct names. sum result is unchanged by the fix (19.0 / 16.6).

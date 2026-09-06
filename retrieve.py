@@ -196,7 +196,7 @@ def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, a
         mask &= ~exclude
     total = torch.zeros(E.shape[0], device=dev)
     exact = torch.zeros(E.shape[0], device=dev)
-    per_mention = []                                      # best chain score per mention (for the AND readouts)
+    per_name = {}                                         # best chain score per NAME: OR over a name's resolutions and chains, AND across names
     for (i, n, mt, w) in ments:
         best = None
         if adj is not None and beta > 0:
@@ -217,9 +217,9 @@ def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, a
             zs = zs * wt
             best = zs if best is None else torch.maximum(best, zs)
         total += best
-        if best is not None: per_mention.append(best)
-    if agg != "sum" and len(per_mention) >= 2:           # AND over mentions of (OR over chains): one stacked tensor, one reduction
-        S = torch.stack(per_mention)                      # (k, N)
+        if best is not None: per_name[n] = best if n not in per_name else torch.maximum(per_name[n], best)
+    if agg != "sum" and len(per_name) >= 2:              # AND over names of (OR over resolutions and chains): one stacked tensor, one reduction
+        S = torch.stack(list(per_name.values()))          # (k_names, N)
         if agg == "min": total = S.min(0).values
         elif agg == "softmin": total = -agg_p * torch.logsumexp(-S / agg_p, 0)
         elif agg == "logsig": total = F.logsigmoid(S - agg_p).sum(0)
@@ -356,7 +356,7 @@ def main():
             rows_all.append(m)
             if top:
                 rows_cov.append(m)
-            (rows_multi if len({i_ for i_, _, _, _ in ments}) >= 2 else rows_single).append(m)
+            (rows_multi if len({n_ for _, n_, _, _ in ments}) >= 2 else rows_single).append(m)
         out[int(qid)] = {"top": top[:100], "answer_type": at, "mentions": [(i_, n_, mt) for (i_, n_, mt, w) in ments], "negation": neg}
         if fe is not None:
             out[int(qid)]["feats"] = fe
@@ -368,7 +368,7 @@ def main():
     if rows_cov:
         print("relational-only, covered queries:", {k: round(v, 4) for k, v in summarize(rows_cov).items()})
     if rows_multi:
-        print(f"  >= 2 mentions (n={len(rows_multi)}):", {k: round(v, 4) for k, v in summarize(rows_multi).items()}, f"| 1 mention (n={len(rows_single)}):", {k: round(v, 4) for k, v in summarize(rows_single).items()})
+        print(f"  >= 2 names (n={len(rows_multi)}):", {k: round(v, 4) for k, v in summarize(rows_multi).items()}, f"| 1 name (n={len(rows_single)}):", {k: round(v, 4) for k, v in summarize(rows_single).items()})
     json.dump(out, open(a.out or f"data/rel_{a.split}.json", "w"))
 
 
