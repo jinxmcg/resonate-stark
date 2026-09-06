@@ -498,3 +498,21 @@ table under the projector (both are geometric tables of the same width); the joi
 they may differ, because ResonatE's unit-norm rows and inner-product readout are what the question
 loss trains directly. If RotatE matches on both, the claim in the paper becomes "a KG table can
 serve both" rather than "this model's table serves both", and the paper will say so.
+Lever 8 amendment (before any result): RotatE's L1-of-moduli distance costs ~15x more per step here
+(2000 steps in 174 s vs ~5 min for the whole 50k with a matmul); the run uses RotatE's L2 variant
+(distance = ||h e^{i theta} - t||_2, computed through a matmul expansion), same gamma 12, same regime.
+Lever 8 result (scripts/lever8_chain.sh; RotatE L2 variant, M=144 complex, 50k steps, same regime,
+188 s; identical projector = t2l_generic.py for BOTH tables, 3 epochs, train + paraphrases), val:
+                                               plain Hit@1 / Hit@5 / R@20 / MRR   paraphrased                    link MRR (before -> after)
+  ResonatE frozen, inner-product readout       19.7 / 30.7 / 31.8 / 25.2          19.3 / 29.8 / 30.6 / 24.6      0.557
+  RotatE   frozen, its L2-distance readout      10.1 / 18.6 / 21.7 / 14.6           9.9 / 18.5 / 21.3 / 14.3      0.523
+  RotatE   frozen, inner-product readout (ctl)  13.3 / 21.6 / 22.5 / 17.5          12.3 / 20.4 / 21.4 / 16.7      0.523
+  ResonatE joint (table unfrozen, edges + q)    26.9 / 37.9 / 35.4 / 32.2          25.4 / 37.4 / 34.2 / 31.1      0.557 -> 0.570
+  RotatE   joint (table unfrozen, edges + q)    12.7 / 24.8 / 25.8 / 18.3          12.5 / 24.5 / 25.7 / 18.1      0.523 -> 0.516
+The written prediction (frozen tables tie) was WRONG: under the identical projector RotatE's table
+takes the projection at about half the Hit@1, with either readout, and joint training helps it
+little (+2.6) while costing it link MRR (-0.007); ResonatE gains +7 and +0.013. Caveats, stated
+plainly: single seed; RotatE's L2 variant with my initialisation and lr 1e-3 (not tuned; its link
+MRR is 0.034 below ResonatE's under the same regime, so part of the gap may be an under-tuned
+control); one dataset. A RotatE tuning sweep (lr x gamma, chosen by held-out link MRR, never by QA)
+follows before the claim is written into the paper.

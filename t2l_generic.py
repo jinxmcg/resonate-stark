@@ -12,7 +12,7 @@ from stark_qa import load_qa
 from transformers import AutoTokenizer, AutoModel
 from metrics import stark_metrics, summarize
 from train_prime import load_kg
-from rotate_prime import rot, dist, mrr_holdout as rot_mrr
+from rotate_prime import rot, dist, dist_all, mrr_holdout as rot_mrr
 from joint_train import mrr_holdout as res_mrr
 QPRE = "Represent this sentence for searching relevant passages: "
 
@@ -25,7 +25,7 @@ class Proj(nn.Module):
         return cnorm(z) if self.readout == "dot" else z
     def score(self, z, E, gamma=12.0):
         if self.readout == "dot": return torch.real(z @ E.conj().t()) * self.scale.exp()
-        return torch.cat([gamma - dist(z[:, None, :], E[c:c+8192][None]) for c in range(0, E.shape[0], 8192)], 1)
+        return gamma - dist_all(z, E)
 
 def main():
     p = argparse.ArgumentParser(); p.add_argument("--table", choices=["resonate", "rotate"], required=True); p.add_argument("--readout", choices=["dot", "dist"], required=True)
@@ -66,7 +66,7 @@ def main():
                     loss_e = F.cross_entropy(logits, torch.zeros(2048, dtype=torch.long, device=dev)) + 0.1 * (z - e_pos).abs().pow(2).sum(-1).mean()
                 else:
                     E = table(); th = theta[rr_[idx]] * torch.where(rev, -1.0, 1.0)[:, None]; z = rot(E[src], th)
-                    sp_ = gamma - dist(z, E[dst]); sn = torch.cat([gamma - dist(z[:, None, :], E[negs[c:c+512]][None]) for c in range(0, 4096, 512)], 1)
+                    sp_ = gamma - dist(z, E[dst]); sn = gamma - dist_all(z, E[negs])
                     loss_e = F.cross_entropy(torch.cat([sp_[:, None], sn], 1), torch.zeros(2048, dtype=torch.long, device=dev))
             batch = [train[j] for j in perm[b:b + a.batch]]
             enc = tok([QPRE + q for q, _ in batch], return_tensors="pt", padding=True, truncation=True, max_length=128).to(dev)

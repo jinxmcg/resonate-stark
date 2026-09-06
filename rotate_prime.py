@@ -1,4 +1,4 @@
-"""RotatE on the STaRK-Prime graph with train_prime.py's regime (lever 8 control).
+"""RotatE (L2 variant) on the STaRK-Prime graph with train_prime.py's regime (lever 8 control).
 Entities: complex (N, M); relation: phase vector theta_r (M,), reverse = -theta; score = gamma - sum_m
 |h_m e^{i theta} - t_m|. Same batch / negatives / steps / holdout as train_prime.py. Saves
 models/rotate.pt {"E": real view (N, 2M), "theta": (n_rel, M), "gamma", "N", "n_rel", "M"}."""
@@ -9,8 +9,13 @@ from train_prime import load_kg
 def rot(h, theta):                      # h complex (B, M); theta (B, M)
     return h * torch.polar(torch.ones_like(theta), theta)
 
-def dist(z, t):                         # L1 of moduli
-    return (z - t).abs().sum(-1)
+def dist(z, t):                         # L2 distance between complex vectors (RotatE's L2 variant; the L1-of-moduli form costs ~15x more per step here)
+    return torch.linalg.vector_norm(torch.view_as_real(z - t), dim=(-2, -1))
+
+def dist_all(z, E):                     # L2 distances of every z (B, M) to every row of E (K, M) through one matmul
+    zr = torch.view_as_real(z).reshape(z.shape[0], -1); Er = torch.view_as_real(E).reshape(E.shape[0], -1)
+    d2 = (zr * zr).sum(1, keepdim=True) + (Er * Er).sum(1)[None, :] - 2 * zr @ Er.t()
+    return d2.clamp_min(0).sqrt()
 
 @torch.no_grad()
 def mrr_holdout(E, theta, gamma, val, N, n_rel, dev, n=5000, negs=500, seed=123, chunk=250):
@@ -20,7 +25,7 @@ def mrr_holdout(E, theta, gamma, val, N, n_rel, dev, n=5000, negs=500, seed=123,
         rel = torch.from_numpy(r[idx]).to(dev); ng = torch.from_numpy(rng.integers(0, N, size=(len(idx), negs))).to(dev); rr = []
         for b in range(0, len(idx), chunk):
             th = theta[rel[b:b+chunk]] * (-1 if rev else 1); z = rot(E[src[b:b+chunk]], th)
-            sp = gamma - dist(z, E[dst[b:b+chunk]]); sn = gamma - dist(z[:, None, :], E[ng[b:b+chunk]])
+            sp = gamma - dist(z, E[dst[b:b+chunk]]); sn = gamma - torch.stack([dist(z[j][None], E[ng[b+j]]) for j in range(len(z))]) if False else gamma - dist(z[:, None, :], E[ng[b:b+chunk]])
             rr.append(1.0 / (1 + (sn > sp[:, None]).sum(1)).float())
         out.append(torch.cat(rr).mean().item())
     return out
@@ -40,8 +45,7 @@ def main():
         negs = torch.randint(0, N, (a.neg,), device=dev, generator=gen)
         E = torch.view_as_complex(E_real.view(N, a.M, 2)); z = rot(E[src], th)
         sp = a.gamma - dist(z, E[dst])
-        # L1-of-moduli against the shared negatives, chunked over negatives to bound memory
-        sn = torch.cat([a.gamma - dist(z[:, None, :], E[negs[c:c+512]][None]) for c in range(0, a.neg, 512)], 1)
+        sn = a.gamma - dist_all(z, E[negs])
         loss = F.cross_entropy(torch.cat([sp[:, None], sn], 1), torch.zeros(a.batch, dtype=torch.long, device=dev))
         opt.zero_grad(set_to_none=True); loss.backward(); opt.step(); sched.step()
         if step % 2000 == 0 or step == a.steps: print(f"step {step}/{a.steps} loss {loss.item():.3f} ({time.time()-t0:.0f}s)", flush=True)
