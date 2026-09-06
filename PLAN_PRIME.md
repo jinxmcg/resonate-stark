@@ -340,3 +340,15 @@ P2 FINAL pipeline: retrieve.py (base table, beta 30, bge anchors, LLM-override p
 + p_joint text-to-latent (t2l_rank.py) + RRF w 0.45 + per-type reranker data/rerank_llm_ancf_bgeft2_pjoint_aug_oof.json.
 vs P1 (26.8 / 49.7 / 58.4 / 37.3 plain; 22.5 / 46.1 / 54.3 / 33.3 paraphrased): +16.7 / +18.1 Hit@1.
 Phrasing gap 2.9 Hit@1. Second committed read: NOT made (user's call). Box 50038767 idle, kept up.
+
+## Lever 6 pre-registration (2026-09-06, before any run) — push the standalone readout
+Standalone = the joint one-table model answering from the question alone (26.6 / 25.4 Hit@1,
+R@20 35). Two tuning levers now, the latent parser later:
+ (a) more question data + longer: a second paraphrase set of train (paraphrase.py --seed 2), joint
+     training 10 question epochs (edges every step as before): tag p_joint10.
+ (b) multi-vector queries: the head emits V=4 latent vectors per question, score = max over V of
+     Re<z_v, E_t>; same loss. Tags p_jointv4 (3 epochs, one paraphrase set, isolates the effect
+     against p_joint) and p_joint10v4 (10 epochs, two paraphrase sets).
+Measured on plain and paraphrased val: standalone all-entities Hit@1 / R@20 / MRR, held-out link
+MRR. The best by plain-val standalone MRR then gets out-of-fold rankings and the reranker fit, for
+the pipeline number. Reads: train, val, held-out edges. test / test-0.1 / human closed.

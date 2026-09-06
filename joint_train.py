@@ -64,6 +64,8 @@ def main():
     p.add_argument("--ebatch", type=int, default=2048); p.add_argument("--neg", type=int, default=4096); p.add_argument("--lam", type=float, default=0.1)
     p.add_argument("--lr-table", type=float, default=1e-3); p.add_argument("--lr-ops", type=float, default=1e-4); p.add_argument("--lr-enc", type=float, default=2e-5); p.add_argument("--lr-head", type=float, default=1e-3)
     p.add_argument("--wq", type=float, default=1.0, help="weight of the question loss"); p.add_argument("--tag", default="p_joint"); p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--nvec", type=int, default=1, help="latent vectors per question (score = max over them)")
+    p.add_argument("--extra2", default=None, help="a second paraphrase set of train")
     p.add_argument("--fold", default=None, help="K:k — train without fold k of K (by train position); rank only that fold, plain + paraphrased, to data/oof/<tag>_f<k>[_para].json")
     p.add_argument("--eval-table", default=None, help="only measure held-out link MRR of the table stored in this text2latent checkpoint")
     a = p.parse_args(); dev = torch.device("cuda"); torch.manual_seed(a.seed)
@@ -79,8 +81,9 @@ def main():
         return
     node_type = torch.from_numpy(node_type_np).to(dev)
     tn = {int(k): v for k, v in json.load(open("data/dicts.json"))["node_type_dict"].items()}; ktype = {v: k for k, v in tn.items()}
-    tok = AutoTokenizer.from_pretrained(a.encoder); net = T2L(a.encoder, model.m).to(dev)
+    tok = AutoTokenizer.from_pretrained(a.encoder); net = T2L(a.encoder, model.m, nvec=a.nvec).to(dev)
     qa = load_qa("prime"); sp = qa.get_idx_split(); EXTRA = json.load(open(a.extra)) if a.extra else {}
+    EXTRA2 = json.load(open(a.extra2)) if a.extra2 else {}
     train, held = [], []
     K, k = (int(x) for x in a.fold.split(":")) if a.fold else (0, -1)
     for pos, i in enumerate(sp["train"].tolist()):
@@ -88,6 +91,7 @@ def main():
         if a.fold and pos % K == k: held.append(i); continue
         train.append((q, ans))
         if str(int(qid)) in EXTRA: train.append((EXTRA[str(int(qid))], ans))
+        if str(int(qid)) in EXTRA2: train.append((EXTRA2[str(int(qid))], ans))
     print("questions (incl. paraphrases):", len(train), "| train edges:", len(h), flush=True)
     h, r, t = (torch.from_numpy(x).to(dev) for x in (h, r, t)); gen = torch.Generator(device=dev); gen.manual_seed(a.seed)
     ops = [q for n_, q in model.named_parameters() if n_ != "E_real"]
@@ -131,7 +135,7 @@ def main():
             json.dump(out, open(f"data/oof/{a.tag}_f{k}{suf}.json", "w"))
         print("OOF_DONE", k, len(held), round(time.time() - t0), "s", flush=True); return
     torch.save({"model": model.state_dict(), "args": ar, "N": N, "n_rel": n_rel}, f"models/{a.tag}.pt")     # save BEFORE any evaluation
-    torch.save({"head": net.head.state_dict(), "scale": net.scale.detach().cpu(), "encoder": f"models/{a.tag}_enc", "E": None}, f"models/{a.tag}_head.pt")
+    torch.save({"head": net.head.state_dict(), "scale": net.scale.detach().cpu(), "encoder": f"models/{a.tag}_enc", "E": None, "nvec": a.nvec}, f"models/{a.tag}_head.pt")
     net.enc.save_pretrained(f"models/{a.tag}_enc"); tok.save_pretrained(f"models/{a.tag}_enc")
     mt, mh = mrr_holdout(model, val, N, n_rel, dev); print(f"[link] joint table: held-out MRR tail {mt:.4f} head {mh:.4f} mean {(mt+mh)/2:.4f}", flush=True)
     E = model.table().detach()

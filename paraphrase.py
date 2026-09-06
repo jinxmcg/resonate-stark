@@ -16,7 +16,7 @@ SYS = ("You rewrite biomedical search questions the way a real researcher or cli
        "question, nothing else.")
 
 p = argparse.ArgumentParser(); p.add_argument("--split", default="val"); p.add_argument("--model", default="Qwen/Qwen2.5-7B-Instruct")
-p.add_argument("--batch", type=int, default=48); p.add_argument("--limit", type=int, default=0); p.add_argument("--seed", type=int, default=0)
+p.add_argument("--batch", type=int, default=48); p.add_argument("--limit", type=int, default=0); p.add_argument("--seed", type=int, default=0); p.add_argument("--out", default=None)
 a = p.parse_args()
 assert a.split in ("train", "val")
 torch.manual_seed(a.seed)
@@ -37,5 +37,5 @@ for b in range(0, len(idx), a.batch):
         out[int(qa[i][1])] = txt or qa[i][0]
     if b % (a.batch * 10) == 0:
         print(b, round(time.time() - t0), "s |", qa[chunk[0]][0][:90], "->", out[int(qa[chunk[0]][1])][:90], flush=True)
-json.dump(out, open(f"data/para_{a.split}.json", "w"), indent=0)
+json.dump(out, open(a.out or f"data/para_{a.split}.json", "w"), indent=0)
 print("PARA_DONE", len(out), round(time.time() - t0), "s")

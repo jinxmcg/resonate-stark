@@ -20,18 +20,19 @@ QPRE = "Represent this sentence for searching relevant passages: "
 
 
 class T2L(nn.Module):
-    def __init__(self, enc_path, m):
+    def __init__(self, enc_path, m, nvec=1):
         super().__init__()
         self.enc = AutoModel.from_pretrained(enc_path)
-        self.head = nn.Linear(self.enc.config.hidden_size, 2 * m)
+        self.head = nn.Linear(self.enc.config.hidden_size, nvec * 2 * m)
         self.scale = nn.Parameter(torch.tensor(3.0))
-        self.m = m
+        self.m = m; self.nvec = nvec
     def forward(self, enc):
         h = self.enc(**enc).last_hidden_state[:, 0]                      # bge: CLS pooling
-        z = self.head(h).view(-1, self.m, 2)
+        z = self.head(h).view(-1, self.nvec, self.m, 2)                    # (B, V, M) complex, each unit-norm
         return cnorm(torch.view_as_complex(z.contiguous()))
     def score(self, z, E):
-        return torch.real(z @ E.conj().t()) * self.scale.exp()
+        s = torch.real(z @ E.conj().t()) * self.scale.exp()               # (B, V, N)
+        return s.max(1).values                                            # multi-vector: best vector wins
 
 
 def main():

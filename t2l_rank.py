@@ -13,7 +13,7 @@ assert a.split in ("train", "val")
 ck = torch.load(f"models/{a.tag}.pt", map_location="cpu", weights_only=False)
 graph, _ = load_model(a.model, dev); E = graph.table().detach().clone()
 if ck.get("E") is not None: E = torch.view_as_complex(ck["E"]).to(dev)
-tok = AutoTokenizer.from_pretrained(f"models/{a.tag}_enc"); net = T2L(f"models/{a.tag}_enc", E.shape[1]).to(dev)
+tok = AutoTokenizer.from_pretrained(f"models/{a.tag}_enc"); net = T2L(f"models/{a.tag}_enc", E.shape[1], nvec=ck.get("nvec", 1)).to(dev)
 net.head.load_state_dict(ck["head"]); net.scale.data = ck["scale"].to(dev); net.eval()
 qa = load_qa("prime"); idx = qa.get_idx_split()[a.split].tolist(); QS = json.load(open(a.queries)) if a.queries else {}
 out = {}
