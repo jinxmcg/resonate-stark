@@ -665,3 +665,12 @@ shortened names), ranking second; relations, negation and answer type are minor.
 (i) alias / synonym resolution for anchors (PrimeKG node text carries synonyms; the latent anchor
 head could be trained on alias mentions), (ii) a parse-confidence feature in the reranker,
 (iii) cleaner and harder paraphrases (filter CJK; several styles per question).
+Two-reading test (val, P2 pipeline; plain reading vs the 7B paraphrase reading of the same question):
+  plain 41.3 / 67.2 / 75.3 / 53.1; paraphrase 39.0 / 63.6 / 71.7 / 50.4; RRF of both 41.2; RRF 2:1 41.1;
+  fallback (plain unless no graph-supported candidate, then paraphrase) 41.7 / 67.6 / 75.6 / 53.5;
+  oracle best-of-two per question 47.4 / 72.3 / 77.9 / 58.5.
+Fusing two readings does not help and the fallback adds 0.4; but the oracle upper bound is +6 Hit@1:
+the readings disagree on many questions and SELECTING the right one per question is worth six
+points. That needs a confidence signal for a reading (a selector), and, at query time, a second
+reading that does not require a generative model (deterministic variants: with / without LLM-style
+anchors, alternative answer types, alias-expanded text) — a P4 candidate; not tried.
