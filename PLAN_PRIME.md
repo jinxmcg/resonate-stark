@@ -314,3 +314,6 @@ Pre-registered success (link MRR within 0.02 of base AND QA >= t2lj): MET. One t
 graph queries (link MRR up 0.011 from the extra edge steps) and language questions (26.6 Hit@1 from
 the question alone, phrasing gap 1.2) with the same readout. Retrieval check with the joint table
 (walk + model path) pending.
+Retrieval check with the joint table (retrieve.py, LLM override, bge anchors), val:
+  walk + model   base table 24.9 / 40.4 / 48.8 / 32.1   joint table 24.3 / 40.6 / 49.0 / 32.2   (intact)
+  model only     base table 19.0 / 33.3 / 40.9 / 25.8   joint table 17.9 / 32.9 / 40.1 / 25.3   (-1.1 Hit@1)
