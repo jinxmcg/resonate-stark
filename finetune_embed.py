@@ -8,16 +8,16 @@ from stark_qa import load_qa
 from sentence_transformers import SentenceTransformer, InputExample, losses
 from torch.utils.data import DataLoader
 ap = argparse.ArgumentParser(); ap.add_argument("--extra-queries", default=None, help="json {query_id: text}: paraphrased train questions, added as extra (query, answer) pairs")
-ap.add_argument("--out", default="models/bge_ft"); ap.add_argument("--epochs", type=int, default=2); A = ap.parse_args()
+ap.add_argument("--out", default="models/bge_ft"); ap.add_argument("--epochs", type=int, default=2); ap.add_argument("--extra2", default=None); A = ap.parse_args()
 random.seed(0); torch.manual_seed(0)
 docs = {json.loads(l)["id"]: json.loads(l)["text"][:1500] for l in open("data/docs.jsonl")}
 qa = load_qa("prime"); tr = qa.get_idx_split()["train"].tolist()
 QPRE = "Represent this sentence for searching relevant passages: "
 ex = []
-EXTRA = json.load(open(A.extra_queries)) if A.extra_queries else {}
+EXTRA = json.load(open(A.extra_queries)) if A.extra_queries else {}; EXTRA2 = json.load(open(A.extra2)) if A.extra2 else {}
 for i in tr:
     q, qid, ans, _ = qa[i]
-    for qq in [q] + ([EXTRA[str(int(qid))]] if str(int(qid)) in EXTRA else []):
+    for qq in [q] + ([EXTRA[str(int(qid))]] if str(int(qid)) in EXTRA else []) + ([EXTRA2[str(int(qid))]] if str(int(qid)) in EXTRA2 else []):
         for a_ in ans[:3]:
             ex.append(InputExample(texts=[QPRE + qq, docs[a_]]))
 random.shuffle(ex); print("pairs", len(ex), flush=True)

@@ -12,6 +12,7 @@ MODELS = {
     "bge": ("BAAI/bge-base-en-v1.5", "Represent this sentence for searching relevant passages: ", "", {}),
     "bgeft": ("models/bge_ft", "Represent this sentence for searching relevant passages: ", "", {}),
     "bgeft2": ("models/bge_ft2", "Represent this sentence for searching relevant passages: ", "", {}),   # plain + paraphrased train
+    "bgeft3": ("models/bge_ft3", "Represent this sentence for searching relevant passages: ", "", {}),   # lever C: plain + cleaned paraphrases + terse paraphrases
     "qwen": ("Qwen/Qwen3-Embedding-0.6B", "Instruct: Given a biomedical question, retrieve the knowledge-base entries that answer it\nQuery: ", "", {"trust_remote_code": True}),
 }
 p = argparse.ArgumentParser(); p.add_argument("--model", default="bge"); p.add_argument("--max-len", type=int, default=512)

@@ -3,7 +3,7 @@ questions the way a person would type them: different wording, synonyms, abbrevi
 structure, same meaning and same constraints. The model sees the question only (no graph, no
 answers). Writes data/para_{split}.json {query_id: paraphrase}. Never run on test or human.
 Usage: uv run python paraphrase.py --split val [--model Qwen/Qwen2.5-7B-Instruct]"""
-import argparse, json, time, torch
+import argparse, json, time, re, torch
 import stark_shim  # noqa
 from stark_qa import load_qa
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -17,8 +17,15 @@ SYS = ("You rewrite biomedical search questions the way a real researcher or cli
 
 p = argparse.ArgumentParser(); p.add_argument("--split", default="val"); p.add_argument("--model", default="Qwen/Qwen2.5-7B-Instruct")
 p.add_argument("--batch", type=int, default=48); p.add_argument("--limit", type=int, default=0); p.add_argument("--seed", type=int, default=0); p.add_argument("--out", default=None)
+p.add_argument("--style", default="natural", choices=["natural", "terse"], help="terse = clinician's search-box shorthand: abbreviations, dropped function words, descriptions instead of some names")
 a = p.parse_args()
 assert a.split in ("train", "val")
+if a.style == "terse":
+    SYS = ("You rewrite biomedical search questions the way a busy clinician or researcher types them into a search box: "
+           "short, keyword-like, with common abbreviations (e.g. T2D, HTN, CKD, BRCA1), function words dropped, and sometimes a short "
+           "description in place of a name (e.g. 'low potassium' instead of 'hypokalemia'). Keep exactly the same meaning: every "
+           "constraint stays, none is added, and the kind of thing asked for does not change. Write in English only. Output only the "
+           "rewritten query, nothing else.")
 torch.manual_seed(a.seed)
 tok = AutoTokenizer.from_pretrained(a.model); tok.padding_side = "left"
 m = AutoModelForCausalLM.from_pretrained(a.model, dtype=torch.bfloat16).cuda().eval()
@@ -34,6 +41,7 @@ for b in range(0, len(idx), a.batch):
         gen = m.generate(**enc, max_new_tokens=96, do_sample=True, temperature=0.9, top_p=0.95, pad_token_id=tok.eos_token_id)
     for i, g in zip(chunk, gen):
         txt = tok.decode(g[enc["input_ids"].shape[1]:], skip_special_tokens=True).strip().split("\n")[0].strip().strip('"')
+        if re.search(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]", txt): txt = ""      # drop rewrites that drifted into another script (lever C)
         out[int(qa[i][1])] = txt or qa[i][0]
     if b % (a.batch * 10) == 0:
         print(b, round(time.time() - t0), "s |", qa[chunk[0]][0][:90], "->", out[int(qa[chunk[0]][1])][:90], flush=True)

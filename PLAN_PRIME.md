@@ -754,3 +754,11 @@ a right reading with wrong ones. Hard selection stays. LEVER B CANDIDATE: P3 + t
 four deterministic readings: val 44.4 / 68.1 / 75.3 / 55.1 plain, 40.7 / 64.2 / 71.9 / 51.7
 paraphrased (P3: 42.3 / 39.7). models/selectorB_mlp.pt; features fit on train + paraphrased train.
 Query-time cost: four retrievals instead of one (~4x the walk+model stage, still no generative model).
+Lever C (2026-09-07, before any run): (1) drop the CJK-corrupted rewrites from the paraphrase sets
+(paraphrase.py now discards them at generation); (2) a second, terse "search-box" style of train
+paraphrases (abbreviations, dropped function words, descriptions for some names), English only;
+(3) refit the text embedder on plain + cleaned natural + terse (bge_ft3), 5 out-of-fold folds for
+the reranker's text features, re-embed; (4) refit the reranker, re-score the four readings, refit the
+selector. The augmentation set for the parser and the reranker's paraphrased groups stays
+para_train.json (unchanged) so only the embedder changes. Val (plain / paraphrased, the SAME proxy
+files as before) decides against P3 + selector = 44.4 / 40.7.
