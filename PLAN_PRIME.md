@@ -796,3 +796,18 @@ change is inside the noise of the set), while Hit@5 and Recall@20 went up (+3.1,
 strength is template wording. P3's read stays sealed. Per the pre-registration P4 is the submission
 whatever it says; choosing P2 over P4 on the basis of these numbers would be a test-informed choice
 and is recorded here as such if the user takes it.
+
+### P3 read UNSEALED (2026-09-07, at the user's decision to treat P3 and P4 as tested hypotheses)
+  P3 (bug fix only)   test 43.09 / 68.80 / 75.50 / 54.73   test-0.1 41.79 / 72.50 / 77.83 / 54.34   human 28.57 / 53.06 / 61.85 / 40.67
+  P2 (read before)    test 41.81 / 68.30 / 74.77 / 53.66   test-0.1 41.79 / 71.07 / 75.90 / 54.31   human 30.61 / 53.06 / 60.58 / 41.74
+  P4 (P3 + selector)  test 43.70 / 69.33 / 75.49 / 55.21   test-0.1 41.79 / 72.50 / 76.47 / 54.23   human 25.51 / 56.12 / 61.29 / 39.18
+Attribution on the human set (98 questions): the bug fix moved Hit@1 by -2 questions and Recall@20
+up 1.3; the selector moved Hit@1 by a further -3 questions. Both inside the noise of the set; the
+selector's is the larger and is consistent with its choice of the template-strength reading.
+### Decision rule (the user, 2026-09-07): publish the best model and architecture, not the best score.
+Hypotheses tested on the test splits after P2: P3 = a correctness fix (kept: it belongs to the model
+and helps on the synthesized splits, +1.3 Hit@1); P4 = a learned reading selector (dropped: a bolt
+that fits the synthesized distribution and does not transfer to human questions). SUBMISSION = P3.
+All four reads are reported side by side; P4's files are kept (results_p4/) and not submitted.
+Next: the same architecture on STaRK-Amazon and STaRK-MAG with per-dataset learned bolts, and an
+out-of-distribution validation protocol (held-out question templates) before any further lever.
