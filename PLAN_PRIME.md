@@ -834,3 +834,49 @@ wording that produced the human-set losses). P5 is kept only if it improves the 
 hurting plain or natural, on the relational path AND on the full pipeline (reranker refit on train
 with the confirmed anchors, out-of-fold as before). No read of test / human under P5 until the
 protocol passes; if it passes, one read, the fifth, disclosed.
+
+### P5 RESULT (2026-09-07 20:16-20:35, jinx GTX 1080 Ti, scripts/p5_jinx.sh + scripts/p5_jinx2.sh): fail-fast NEGATIVE
+Reduced fail-fast version of the pre-registered grid (the user: "use the 1080ti and fail fast"): 1,000
+train questions instead of 2,000, plain wording and the terse paraphrases (data/para_train_terse.json),
+relational path only (latent parser lp_p3 + bge anchor fallback, --beta 30), confirm model = lp_p3.
+Reads: train split only. Hit@1 / Hit@5 / R@20 / MRR, and string-matched candidates kept / dropped.
+
+Grid 1 (the pre-registered thresholds; ABS is a multiple of the parser's trained anchor floor):
+| wording | setting            | Hit@1 | Hit@5 | R@20 | MRR  | kept / dropped |
+| plain   | no confirm         | 26.2 | 43.1 | 51.2 | 34.2 | 2043 / 0    |
+| plain   | rel 0.8 abs 0.75   | 19.9 | 36.5 | 45.6 | 27.8 | 1058 / 985  |
+| plain   | rel 0.9 abs 0.75   | 19.9 | 36.5 | 45.6 | 27.8 | 1056 / 987  |
+| plain   | rel 0.8 abs 1.0    | 19.6 | 36.0 | 45.2 | 27.2 |  707 / 1336 |
+| plain   | rel 0.9 abs 1.0    | 19.6 | 36.0 | 45.2 | 27.2 |  706 / 1337 |
+| terse   | no confirm         | 22.0 | 36.6 | 42.9 | 28.8 | 1586 / 0    |
+| terse   | rel 0.8 abs 0.75   | 16.6 | 30.1 | 39.1 | 23.2 |  800 / 786  |
+| terse   | rel 0.9 abs 0.75   | 16.6 | 30.1 | 39.1 | 23.2 |  796 / 790  |
+| terse   | rel 0.8 abs 1.0    | 15.4 | 29.2 | 37.7 | 22.1 |  528 / 1058 |
+| terse   | rel 0.9 abs 1.0    | 15.4 | 29.2 | 37.7 | 22.1 |  527 / 1059 |
+The absolute floor binds everywhere (REL 0.8 vs 0.9 changes nothing): half or more of all string-matched
+candidates score below 0.75x the parser's own floor, correct ones included. Loss of 5-7 Hit@1 on both wordings.
+
+Grid 2 (added after grid 1, still train only; the collision-only reading: no absolute floor, so every
+matched name keeps at least its best candidate and only same-name losers can be removed; retrieve.py
+gained a guard so a name whose best score is <= 0 keeps all candidates):
+| wording | setting            | Hit@1 | Hit@5 | R@20 | MRR  | kept / dropped |
+| plain   | rel 0.5  no floor  | 25.1 | 43.0 | 50.5 | 33.4 | 1789 / 254  |
+| plain   | rel 0.8  no floor  | 25.1 | 43.2 | 51.0 | 33.5 | 1762 / 281  |
+| plain   | rel 0.95 no floor  | 25.0 | 43.2 | 51.0 | 33.5 | 1755 / 288  |
+| plain   | rel 0.8  abs 0.5   | 20.7 | 37.8 | 47.2 | 28.8 | 1371 / 672  |
+| terse   | rel 0.5  no floor  | 21.5 | 36.9 | 42.9 | 28.6 | 1419 / 167  |
+| terse   | rel 0.8  no floor  | 21.5 | 37.0 | 43.1 | 28.6 | 1397 / 189  |
+| terse   | rel 0.95 no floor  | 21.5 | 36.9 | 43.1 | 28.6 | 1387 / 199  |
+| terse   | rel 0.8  abs 0.5   | 17.7 | 31.8 | 39.9 | 24.5 | 1072 / 514  |
+No setting improves terse; the gentlest one (drop only same-name candidates under half the best score)
+costs 1.1 plain / 0.5 terse Hit@1. The three relative thresholds are flat: nearly every collision loser
+scores far below the winner, i.e. the parser's question vector takes a decisive side, and it sides
+against the node the answer path needs often enough to lose. The existing behaviour (keep every
+candidate, let exact-support and the z-scored readout sort them) is better than the parser's pick.
+
+DECISION: P5 fails its own pre-registered gate (help terse without hurting plain) at step 1, on train.
+Not carried to the val protocol; no terse val paraphrases generated; no read. Recorded as the third
+pre-registered negative of this line (after the query-time AND and the trained AND). The name-collision
+losses on the human set (MS, CAD, CP, HR) remain open; a rule that fixes them will have to come from
+the readout over the candidate's neighbourhood (which candidate has the relation the question asks
+for), not from the question vector alone. SUBMISSION stays P3.

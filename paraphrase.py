@@ -17,6 +17,7 @@ SYS = ("You rewrite biomedical search questions the way a real researcher or cli
 
 p = argparse.ArgumentParser(); p.add_argument("--split", default="val"); p.add_argument("--model", default="Qwen/Qwen2.5-7B-Instruct")
 p.add_argument("--batch", type=int, default=48); p.add_argument("--limit", type=int, default=0); p.add_argument("--seed", type=int, default=0); p.add_argument("--out", default=None)
+p.add_argument("--dtype", default="bf16", choices=["bf16", "fp16"], help="fp16 for Pascal cards")
 p.add_argument("--style", default="natural", choices=["natural", "terse"], help="terse = clinician's search-box shorthand: abbreviations, dropped function words, descriptions instead of some names")
 a = p.parse_args()
 assert a.split in ("train", "val")
@@ -28,7 +29,7 @@ if a.style == "terse":
            "rewritten query, nothing else.")
 torch.manual_seed(a.seed)
 tok = AutoTokenizer.from_pretrained(a.model); tok.padding_side = "left"
-m = AutoModelForCausalLM.from_pretrained(a.model, dtype=torch.bfloat16).cuda().eval()
+m = AutoModelForCausalLM.from_pretrained(a.model, dtype=(torch.bfloat16 if a.dtype == "bf16" else torch.float16)).cuda().eval()
 qa = load_qa("prime"); idx = qa.get_idx_split()[a.split].tolist()
 if a.limit: idx = idx[:a.limit]
 out, t0 = {}, time.time()

@@ -335,7 +335,7 @@ def main():
             for (i_, n_, mt, w), s_ in zip(ments, sc): by_name.setdefault(n_, []).append((i_, mt, w, s_))
             kept = []
             for n_, lst in by_name.items():
-                best = max(s_ for *_, s_ in lst); thr = max(a.confirm_rel * best, a.confirm_abs * floor_abs)
+                best = max(s_ for *_, s_ in lst); thr = max(a.confirm_rel * best if best > 0 else -1e9, a.confirm_abs * floor_abs)
                 for (i_, mt, w, s_) in lst:
                     if s_ >= thr: kept.append((i_, n_, mt, w)); n_conf_kept += 1
                     else: n_conf_dropped += 1
