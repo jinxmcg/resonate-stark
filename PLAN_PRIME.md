@@ -811,3 +811,10 @@ that fits the synthesized distribution and does not transfer to human questions)
 All four reads are reported side by side; P4's files are kept (results_p4/) and not submitted.
 Next: the same architecture on STaRK-Amazon and STaRK-MAG with per-dataset learned bolts, and an
 out-of-distribution validation protocol (held-out question templates) before any further lever.
+Next (planned 2026-09-07, to run tomorrow): P5 = latent-confirmed anchors — every string-matched
+mention's candidate entities are scored by the question vector (anchor head / readout) against the
+entity rows and kept only above a floor relative to the best (floor set on train); a general
+disambiguation rule for name collisions (MS the abbreviation vs MS the gene, Aspirin drug vs exposure,
+insulin vs INS). Measured on val plain, paraphrased AND terse paraphrases (the ones with abbreviations);
+kept only if it helps the terse set without hurting the others. No read until the OOD protocol says so.
+Box 50098239 stopped at the user's request after pulling everything.
