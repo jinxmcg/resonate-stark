@@ -762,3 +762,15 @@ the reranker's text features, re-embed; (4) refit the reranker, re-score the fou
 selector. The augmentation set for the parser and the reranker's paraphrased groups stays
 para_train.json (unchanged) so only the embedder changes. Val (plain / paraphrased, the SAME proxy
 files as before) decides against P3 + selector = 44.4 / 40.7.
+Lever C result (val): text ranker alone bge_ft3 22.0 / 44.0 / 51.1 / 32.3 plain, 20.7 / 41.6 / 48.6 /
+30.5 paraphrased (bge_ft2: 21.9 / 43.0 / 50.6 / 31.9 and 19.6 / 41.3 / 48.1 / 29.6): small gains alone.
+Single reading with the refit reranker: 42.8 / 67.6 / 75.5 / 54.1 plain (P3 42.3 / 68.3 / 75.5 / 53.9),
+39.6 paraphrased (39.7). With the selector, three seeds of the MLP each:
+  B  (bge_ft2)  plain 44.4 / 44.2 / 43.8 (mean 44.1)   paraphrased 40.7 / 40.5 / 40.6 (mean 40.6)
+  C  (bge_ft3)  plain 43.7 / 43.6 / 43.5 (mean 43.6)   paraphrased 40.2 / 40.4 / 40.3 (mean 40.3)
+LEVER C DROPPED: the embedder's own gain does not survive the reranker + selector (-0.5 / -0.3,
+consistent across seeds). Terse paraphrases and the CJK filter stay available (data/para_train_terse.json,
+data/para_train_clean.json) for future work.
+P4 FINAL CANDIDATE = P3 + the reading selector on the bge_ft2 features (models/selectorB_mlp.pt, seed 0):
+val 44.4 / 68.1 / 75.3 / 55.1 plain, 40.7 / 64.2 / 71.9 / 51.7 paraphrased. Selector seed variance
+~0.3 Hit@1. Awaiting the user's go for the one committed read (the fourth overall; P3's stays sealed).

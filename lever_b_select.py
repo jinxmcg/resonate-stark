@@ -7,15 +7,17 @@ import json, csv, ast, numpy as np, torch, stark_shim
 from stark_qa import load_qa
 from metrics import stark_metrics, summarize
 READ = ["r1", "r2", "r3", "r4"]
+import os
+RES = os.environ.get("LB_RES", "results_b"); SCP = os.environ.get("LB_SC", "scB"); TXT = os.environ.get("LB_TXT", "bgeft2"); OUT = os.environ.get("LB_OUT", "selectorB_mlp")
 
 NT = np.load("data/kg.npz")["node_type"]; TN = {int(k): v for k, v in json.load(open("data/dicts.json"))["node_type_dict"].items()}
 
 def load(split, V):
-    P = {r: {int(x["query_id"]): ast.literal_eval(x["pred_rank"]) for x in csv.DictReader(open(f"results_b/{split}_{V}_{r}.csv"))} for r in READ}
-    SC = {r: json.load(open(f"data/scB_{split}_{V}_{r}.json")) for r in READ}
+    P = {r: {int(x["query_id"]): ast.literal_eval(x["pred_rank"]) for x in csv.DictReader(open(f"{RES}/{split}_{V}_{r}.csv"))} for r in READ}
+    SC = {r: json.load(open(f"data/{SCP}_{split}_{V}_{r}.json")) for r in READ}
     LP = {r: (json.load(open(f"data/lpB_{split}_{V}_{r}.json")) if r != "r2" else {}) for r in READ}
     suf = "_para" if V == "para" else ""
-    TX = json.load(open(f"data/text_{split}_bgeft2{suf}.json")) if split == "val" else json.load(open(f"data/text_train_bgeft2oof{suf}.json"))
+    TX = json.load(open(f"data/text_{split}_{TXT}{suf}.json")) if split == "val" else json.load(open(f"data/text_train_{TXT}oof{suf}.json"))
     U = json.load(open(f"data/text_{split}_pjoint{suf}.json")) if split == "val" else json.load(open(f"data/text_train_pjointoof{suf}.json"))
     RL = {r: json.load(open(f"data/relB_{split}_{V}_{r}.json")) if False else None for r in READ}   # answer types come from the parse files / pattern parser below
     return P, SC, LP, TX, U
@@ -75,7 +77,7 @@ def main():
         print("  oracle           :", {k: round(v * 100, 1) for k, v in summarize(orc).items()})
     json.dump({"w": wv.tolist(), "b": bv, "mu": mu.tolist(), "sd": sd.tolist(), "names": names}, open("data/selectorB.json", "w"))
     # non-linear selector: 2-layer MLP, listwise loss, early stopping on the last 10% of TRAIN questions (val untouched)
-    torch.manual_seed(0); n = Xt.shape[0]; cut = int(n * 0.9); perm = torch.randperm(n, device=dev); tr_i, es_i = perm[:cut], perm[cut:]
+    torch.manual_seed(int(os.environ.get("LB_SEED", "0"))); n = Xt.shape[0]; cut = int(n * 0.9); perm = torch.randperm(n, device=dev); tr_i, es_i = perm[:cut], perm[cut:]
     mlp = torch.nn.Sequential(torch.nn.Linear(Xt.shape[-1], 64), torch.nn.ReLU(), torch.nn.Linear(64, 32), torch.nn.ReLU(), torch.nn.Linear(32, 1)).to(dev)
     opt = torch.optim.Adam(mlp.parameters(), lr=2e-3, weight_decay=1e-4); best = (1e9, None)
     for ep in range(400):
@@ -101,7 +103,7 @@ def main():
                     for rank, c in enumerate(P[r][qid][:100]): sc[c] = sc.get(c, 0.0) + w_[rj] / (60 + rank + 1)
                 rows.append(stark_metrics([c for c, _ in sorted(sc.items(), key=lambda x: -x[1])][:100], ans))
             print(f"   soft mixture T={T}:", {k: round(v * 100, 1) for k, v in summarize(rows).items()})
-    torch.save({"state": mlp.state_dict(), "mu": mu.tolist(), "sd": sd.tolist(), "names": names}, "models/selectorB_mlp.pt")
+    torch.save({"state": mlp.state_dict(), "mu": mu.tolist(), "sd": sd.tolist(), "names": names}, f"models/{OUT}.pt")
 
 if __name__ == "__main__":
     main()
