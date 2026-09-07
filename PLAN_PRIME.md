@@ -782,3 +782,17 @@ four deterministic readings, bge_ft2 text ranker, p_joint readout, reranker
 data/rerank_lp_ancf_bgeft2_pjoint_aug_oof.json (w 0.45), selector models/selectorB_mlp.pt (seed 0).
 scripts/committed_read_p4.sh: val check, then test, test-0.1, human_generated_eval once each. Fourth
 read overall (P1, P2 reported; P3 sealed). Submitted whatever it says.
+
+### P4 COMMITTED READ (2026-09-07 01:26-01:50, box 50098239, scripts/committed_read_p4.sh; fourth read overall)
+  val check            44.36 / 68.14 / 75.32 / 55.14  (matches development exactly, same picks)
+  test (2801)          43.70 / 69.33 / 75.49 / 55.21    P2 read: 41.81 / 68.30 / 74.77 / 53.66    P1: 28.7 / 51.9 / 59.9 / 39.1
+  test-0.1 (280)       41.79 / 72.50 / 76.47 / 54.23    P2 read: 41.79 / 71.07 / 75.90 / 54.31    P1: 28.2 / 50.7 / 59.9 / 38.5
+  human (98)           25.51 / 56.12 / 61.29 / 39.18    P2 read: 30.61 / 53.06 / 60.58 / 41.74    P1: 20.4 / 41.8 / 48.6 / 29.9
+  selector picks: test [870, 1110, 644, 177]; test-0.1 [77, 118, 65, 20]; human [26, 42, 26, 4]
+Reading: synthesized full +1.9 Hit@1 as val predicted; 10% subset flat on Hit@1, up on the rest;
+HUMAN Hit@1 DOWN 5.1 points = 5 of 98 questions (P2's 95% CI on this number was [21.4, 39.8], so the
+change is inside the noise of the set), while Hit@5 and Recall@20 went up (+3.1, +0.7) and MRR down
+2.6. On the human set the selector chose the exact-names reading most (42 of 98) — a reading whose
+strength is template wording. P3's read stays sealed. Per the pre-registration P4 is the submission
+whatever it says; choosing P2 over P4 on the basis of these numbers would be a test-informed choice
+and is recorded here as such if the user takes it.
