@@ -14,14 +14,14 @@ from text2latent import T2L
 from rerank import build
 
 class Ask:
-    def __init__(self, dev="cuda"):
+    def __init__(self, dev="cuda", parser_ck="models/lp.pt"):
         t0 = time.time(); self.dev = torch.device(dev)
         self.graph, self.n_rel = load_model("models/p_k12b4_50k.pt", self.dev); self.E0 = self.graph.table().detach()
         d = np.load("data/kg.npz"); self.names = json.load(open("data/names.json")); self.node_type = d["node_type"]; N = len(self.node_type)
         dicts = json.load(open("data/dicts.json")); self.tn = {int(k): v for k, v in dicts["node_type_dict"].items()}; self.rel_names = {int(k): v for k, v in dicts["edge_type_dict"].items()}
         self.parser = Parser(self.names, self.node_type, self.tn, json.load(open("data/signatures.json"))); self.adj = Adjacency(d, self.n_rel, N)
         self.type_mask = {t: torch.from_numpy(self.node_type == i).to(self.dev) for i, t in self.tn.items()}
-        ck = torch.load("models/lp.pt", map_location="cpu", weights_only=False)
+        ck = torch.load(parser_ck, map_location="cpu", weights_only=False)
         self.lp_tok = AutoTokenizer.from_pretrained(ck["encoder"]); self.lp = LP(ck["encoder"], self.E0.shape[1], len(self.tn), 2 * self.n_rel, ck["kanc"]).to(self.dev); self.lp.load_state_dict(ck["state"]); self.lp.eval(); self.kanc = ck["kanc"]; self.floor = ck["sim_floor"]
         jg, _ = load_model("models/p_joint.pt", self.dev); self.EJ = jg.table().detach()
         hk = torch.load("models/p_joint_head.pt", map_location="cpu", weights_only=False); self.t2l_tok = AutoTokenizer.from_pretrained("models/p_joint_enc")
@@ -78,8 +78,8 @@ class Ask:
         print(f"  {n_ok}/{len(r['ranked'])} graph-supported from what was read · parse {T['parse']*1000:.1f} ms · walk+model {T['walk+model']*1000:.1f} ms · text {T['text']*1000:.1f} ms · readout {T['readout']*1000:.1f} ms · rerank {T['fuse+rerank']*1000:.1f} ms · total {T['total']*1000:.1f} ms")
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(); p.add_argument("question", nargs="?"); p.add_argument("-k", type=int, default=8); p.add_argument("--repl", action="store_true"); p.add_argument("--device", default="cuda")
-    a = p.parse_args(); A = Ask(a.device); print(f"[stark-prime] 129,375 entities · models loaded in {A.load_s:.1f} s · no generative model in the loop")
+    p = argparse.ArgumentParser(); p.add_argument("question", nargs="?"); p.add_argument("-k", type=int, default=8); p.add_argument("--repl", action="store_true"); p.add_argument("--device", default="cuda"); p.add_argument("--parser", default="models/lp.pt", help="parser head checkpoint (P3 = the retrained head)")
+    a = p.parse_args(); A = Ask(a.device, a.parser); print(f"[stark-prime] 129,375 entities · models loaded in {A.load_s:.1f} s · no generative model in the loop")
     if a.question: A.show(a.question, a.k)
     if a.repl or not a.question:
         while True:
