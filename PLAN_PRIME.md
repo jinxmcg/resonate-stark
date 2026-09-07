@@ -777,3 +777,8 @@ val 44.4 / 68.1 / 75.3 / 55.1 plain, 40.7 / 64.2 / 71.9 / 51.7 paraphrased. Sele
 P4 read script verified (2026-09-07 01:12-01:20, box 50098239, VAL_ONLY): from scratch on val it
 reproduces 44.36 / 68.14 / 75.32 / 55.14 with the same reading picks (699 / 874 / 523 / 145) as the
 development run; eight minutes per split. Awaiting the user's go for test, test-0.1, human.
+P4 committed read AUTHORISED by the user (2026-09-07, "ok do it"). Pipeline frozen: P3 parser (models/lp.pt),
+four deterministic readings, bge_ft2 text ranker, p_joint readout, reranker
+data/rerank_lp_ancf_bgeft2_pjoint_aug_oof.json (w 0.45), selector models/selectorB_mlp.pt (seed 0).
+scripts/committed_read_p4.sh: val check, then test, test-0.1, human_generated_eval once each. Fourth
+read overall (P1, P2 reported; P3 sealed). Submitted whatever it says.
