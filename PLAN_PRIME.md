@@ -818,3 +818,19 @@ disambiguation rule for name collisions (MS the abbreviation vs MS the gene, Asp
 insulin vs INS). Measured on val plain, paraphrased AND terse paraphrases (the ones with abbreviations);
 kept only if it helps the terse set without hurting the others. No read until the OOD protocol says so.
 Box 50098239 stopped at the user's request after pulling everything.
+
+## P5 pre-registration (2026-09-07, before any run) — latent-confirmed anchors, under an OOD protocol
+Rule: a string in a question is a set of candidate entities; a candidate is kept only if the
+question's own vector points at it. Implementation (retrieve.py --confirm): for every string-matched
+mention (names, short symbols), score each candidate entity id by the latent parser's anchor vectors
+(max over the K=3 vectors of Re<z_k, E_id> * scale, the same score the anchor head is trained on);
+keep candidates with score >= max(REL * best score among that name's candidates, ABS * the trained
+anchor floor); drop the rest (a name whose candidates all fall below is dropped: no anchor from it).
+REL in {0.7, 0.8, 0.9}, ABS in {0.5, 0.75, 1.0}: chosen on TRAIN only (relational path on 2,000 train
+questions, plain + terse), by terse Hit@1 subject to plain not dropping.
+OOD protocol for the decision (val only): plain val, natural paraphrases (as before), and TERSE
+paraphrases of val (to be generated with the same 7B prompt: abbreviations, shorthand — the
+wording that produced the human-set losses). P5 is kept only if it improves the terse set without
+hurting plain or natural, on the relational path AND on the full pipeline (reranker refit on train
+with the confirmed anchors, out-of-fold as before). No read of test / human under P5 until the
+protocol passes; if it passes, one read, the fifth, disclosed.

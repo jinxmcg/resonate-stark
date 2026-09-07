@@ -265,6 +265,8 @@ def main():
     p.add_argument("--lparse", default=None, help="latent parser output (latent_parser.py): answer type, anchor ids, operator ids per query; replaces the regex/LLM parse (exact-name mentions kept as fallback)")
     p.add_argument("--agg", default="sum", choices=["sum", "min", "softmin", "logsig", "count"], help="how mention scores combine: sum (OR-ish) or an AND readout")
     p.add_argument("--agg-p", type=float, default=1.0, help="tau for softmin, c for logsig")
+    p.add_argument("--confirm", default=None, help="P5: latent-confirmed anchors — path of the latent parser checkpoint (models/lp.pt); string-matched candidates must be pointed at by the question vector")
+    p.add_argument("--confirm-rel", type=float, default=0.8); p.add_argument("--confirm-abs", type=float, default=0.75)
     p.add_argument("--aliases", default=None, help="data/aliases.json from build_aliases.py (P4 lever A)")
     p.add_argument("--legacy-names", action="store_true", help="P1/P2 behaviour: no 2-3 character gene symbols (reproduces the committed reads)")
     p.add_argument("--no-model", action="store_true", help="ablation: drop the ResonatE score entirely; rank by exact-support count only (ties by node degree)")
@@ -296,6 +298,13 @@ def main():
     if a.limit: idx = idx[:a.limit]
     QS = json.load(open(a.queries)) if a.queries else None
     assert QS is None or not predict_only
+    CONF = None
+    if a.confirm:                                          # P5: load the anchor head once; confirm string-matched candidates with the question's vectors
+        from latent_parser import LP, QPRE as LP_QPRE
+        from transformers import AutoTokenizer
+        ckc = torch.load(a.confirm, map_location="cpu", weights_only=False)
+        lp_tok = AutoTokenizer.from_pretrained(ckc["encoder"]); lpm = LP(ckc["encoder"], model.m, len(tn), 2 * n_rel, ckc["kanc"]).to(dev); lpm.load_state_dict(ckc["state"]); lpm.eval()
+        E_all = model.table().detach(); CONF = (lp_tok, lpm, E_all, ckc["sim_floor"], LP_QPRE); n_conf_kept = n_conf_dropped = 0
     LP = json.load(open(a.llm_parse)) if a.llm_parse else None
     LPZ = json.load(open(a.lparse)) if a.lparse else None
     rel_ids = {v: int(k) for k, v in dicts["edge_type_dict"].items()}
@@ -316,6 +325,21 @@ def main():
             at_use = lz.get("answer_type") if lz.get("answer_type") in type_ok else at0
             l_rels = {int(o) % n_rel for o in lz.get("ops", [])}
         at, ments = parser.parse(q, at=at_use, rel_hints=l_rels, extra_names=[e["name"] for e in l_ents])
+        if CONF is not None and ments:
+            lp_tok, lpm, E_all, floor_abs, lp_qpre = CONF
+            with torch.no_grad():
+                enc = lp_tok([lp_qpre + q], return_tensors="pt", padding=True, truncation=True, max_length=128).to(dev)
+                _, _, zq = lpm(enc); ids = torch.tensor([i_ for i_, _, _, _ in ments], device=dev)
+                sc = (torch.real(zq[0] @ E_all[ids].conj().t()) * lpm.scale.exp()).max(0).values.tolist()   # best of the K vectors per candidate
+            by_name = {}
+            for (i_, n_, mt, w), s_ in zip(ments, sc): by_name.setdefault(n_, []).append((i_, mt, w, s_))
+            kept = []
+            for n_, lst in by_name.items():
+                best = max(s_ for *_, s_ in lst); thr = max(a.confirm_rel * best, a.confirm_abs * floor_abs)
+                for (i_, mt, w, s_) in lst:
+                    if s_ >= thr: kept.append((i_, n_, mt, w)); n_conf_kept += 1
+                    else: n_conf_dropped += 1
+            ments = kept
         if LPZ is not None and at is not None:
             have = {i_ for i_, _, _, _ in ments}
             for i_ in lz.get("anchors", []):
@@ -380,7 +404,7 @@ def main():
             out[int(qid)]["feats"] = fe
         if j % 500 == 0:
             print(j, round(time.time() - t0), "s", flush=True)
-    print(f"{a.split}: n={len(idx)}  answer type found {n_type}  covered (>=1 usable mention) {n_cov} ({n_cov/len(idx):.1%})" + (f"  LLM: type fallback used {n_llm_type}, entity anchors {n_llm_ent}" if LP else ""))
+    print(f"{a.split}: n={len(idx)}  answer type found {n_type}  covered (>=1 usable mention) {n_cov} ({n_cov/len(idx):.1%})" + (f"  LLM: type fallback used {n_llm_type}, entity anchors {n_llm_ent}" if LP else "") + (f"  confirm: kept {n_conf_kept}, dropped {n_conf_dropped}" if CONF is not None else ""))
     if rows_all:
         print("relational-only, all queries (uncovered count as misses):", {k: round(v, 4) for k, v in summarize(rows_all).items()})
     if rows_cov:
