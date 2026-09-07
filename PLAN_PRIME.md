@@ -774,3 +774,6 @@ data/para_train_clean.json) for future work.
 P4 FINAL CANDIDATE = P3 + the reading selector on the bge_ft2 features (models/selectorB_mlp.pt, seed 0):
 val 44.4 / 68.1 / 75.3 / 55.1 plain, 40.7 / 64.2 / 71.9 / 51.7 paraphrased. Selector seed variance
 ~0.3 Hit@1. Awaiting the user's go for the one committed read (the fourth overall; P3's stays sealed).
+P4 read script verified (2026-09-07 01:12-01:20, box 50098239, VAL_ONLY): from scratch on val it
+reproduces 44.36 / 68.14 / 75.32 / 55.14 with the same reading picks (699 / 874 / 523 / 145) as the
+development run; eight minutes per split. Awaiting the user's go for test, test-0.1, human.

@@ -30,6 +30,6 @@ run_split() {
 st "DRY RUN on val"
 run_split val val
 grep -q "hit1': 0.4436" logs/p4_select_val.log || { st "DRY RUN MISMATCH — stopping before any test read"; exit 1; }
-rm -f eval_results_val.csv; mkdir -p results_p4
+rm -f eval_results_val.csv; mkdir -p results_p4; [ -n "$VAL_ONLY" ] && { st "VAL_ONLY_DONE"; exit 0; }
 for S in test test-0.1 human_generated_eval; do run_split $S $S; mv eval_results_$S.csv results_p4/ 2>/dev/null; done
 st "COMMITTED_P4_DONE"
