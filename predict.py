@@ -28,10 +28,13 @@ p.add_argument("--rerank", default=None, help="data/rerank_<reltag>_<texttag>.js
 p.add_argument("--scores-out", default=None, help="write per-query reranker scores of the top-5 (lever B selector features)")
 p.add_argument("--t2l", default=None, help="text-to-latent ranking json for the split (third candidate source, needs a reranker fit with --t2l-tag)")
 p.add_argument("--limit", type=int, default=0, help="score only the first N questions of the split (fail-fast runs on train; same slice as retrieve.py --limit)")
+p.add_argument("--qids", default=None, help="json list of query ids: score only those (subset analyses, e.g. the collision questions)")
 a = p.parse_args()
 qa = load_qa("prime", human_generated_eval=(a.split == "human_generated_eval"))
 idx = qa.get_idx_split()[a.split].tolist() if a.split != "human_generated_eval" else list(range(len(qa)))
 if a.limit: idx = idx[:a.limit]
+if a.qids:
+    keep = set(int(x) for x in json.load(open(a.qids))); idx = [i for i in idx if int(qa[i][1]) in keep]
 rel = json.load(open(a.rel)); txt = json.load(open(a.text))
 RR = None
 if a.rerank:

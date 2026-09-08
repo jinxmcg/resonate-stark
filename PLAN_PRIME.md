@@ -1423,3 +1423,21 @@ test, test-0.1 or human_generated_eval under any outcome. Depends on P10 step 1 
 proxy and on P10 step 2 for P8's terse number, so it runs after P10. Box: vast.ai 50261550 only.
 Cost: six parser trainings (~4-5 minutes each at 18,486 rows), five fold predictions, five
 retrievals, one reranker refit, three scored val runs.
+
+### P10 step 1 (2026-09-08 14:5x UTC, vast.ai 50261550): the terse val proxy exists — data/para_val_terse.json
+2,241 questions rewritten in 77 s (Qwen2.5-7B-Instruct, bf16, --style terse --seed 3, the prompt and
+seed lever C used for train). Median length falls from 21 words to 7:
+  "Which drugs specifically target the glucokinase (GCK) gene?" -> "drugs targeting GCK"
+QUALITY CHECK, run before any arm was scored, because one sampled rewrite was the model ANSWERING
+rather than rewriting ("Which renal condition would preclude ..." -> "chronic kidney disease"), which
+would leak answers into the proxy and inflate every terse number:
+  wording   median words   questions whose text contains the name of one of their true answers
+  plain          21        104 (4.6%)
+  natural        17        108 (4.8%)
+  terse           7        126 (5.6%)
+The baseline is 4.6% — STaRK questions legitimately name an entity that is also among their answers
+(multi-answer questions naming one as a constraint). Terse adds ~1.0 percentage point, about 22
+questions of 2,241. Recorded rather than filtered: filtering would change the question set for every
+arm to remove an effect of ~22 questions, and all three arms share the same text ranker so the
+differential between them is smaller still. Terse numbers carry a ~1pp optimistic bias from this
+cause, disclosed here.
