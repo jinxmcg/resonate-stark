@@ -34,7 +34,7 @@ def main():
     qa = load_qa("prime"); idx = qa.get_idx_split()[a.split].tolist()
     if a.limit: idx = idx[:a.limit]
     rel = json.load(open(a.rel))
-    diffs, fwd_opp, pairs = [], [], []
+    diffs, fwd_opp, pairs, refs = [], [], [], []
     for i in idx:
         q, qid, ans, _ = qa[i]
         r = rel.get(str(int(qid)))
@@ -50,7 +50,13 @@ def main():
         got, want = float(s[anc]), float(f["rev_raw_max"][j])
         of = torch.tensor([(o + n_rel) % (2 * n_rel)], device=dev)                      # the hop the walk used
         sf = torch.real(model.out(model.hop(model.embed(torch.tensor([anc], device=dev)), of), of) @ E.conj().t())[0] * tau
-        diffs.append(abs(got - want)); fwd_opp.append(o < n_rel); pairs.append((float(sf[c]), got))
+        # a float64 reference for the same number: the difference below is fp32 rounding, not a discrepancy
+        cn = lambda v: v / (v.abs().pow(2).sum(-1, keepdim=True).sqrt() + 1e-8)         # cnorm, in double
+        z64 = cn(E[c].to(torch.complex128))                                             # embed
+        z64 = cn(torch.einsum('kij,kj->ki', model.H[o].to(torch.complex128), z64.reshape(-1, model.block_size)).reshape(-1))   # hop
+        ref = float((torch.real(z64 @ E[anc].to(torch.complex128).conj()) * tau.double()).item())
+        diffs.append(abs(got - want)); refs.append((abs(want - ref), abs(got - ref), abs(want)))
+        fwd_opp.append(o < n_rel); pairs.append((float(sf[c]), got))
         if len(diffs) >= a.max_checks: break
     if not diffs:
         print("rev_check: no one-hop question with the answer in its shortlist — nothing checked"); return
@@ -60,8 +66,12 @@ def main():
         print(f"  of these, {int(F.sum())} where the opposite operator is the FORWARD one (the table's own forward score of the triple): max |diff| {D[F].max():.2e}")
     if (~F).any():
         print(f"  {int((~F).sum())} where it is the reverse operator: max |diff| {D[~F].max():.2e}")
+    R = np.array(refs)
+    print(f"  relative to the score magnitude (|rev_raw| mean {R[:, 2].mean():.2f}): max relative difference {(D / np.maximum(R[:, 2], 1e-9)).max():.2e}")
+    print(f"  float64 reference of the same number: max |rev_raw - fp64| {R[:, 0].max():.2e}, max |table readout - fp64| {R[:, 1].max():.2e} (both are fp32 rounding)")
     print(f"  information only — forward score of the same link vs rev_raw: mean {P[:, 0].mean():.3f} vs {P[:, 1].mean():.3f}, Pearson r {np.corrcoef(P[:, 0], P[:, 1])[0, 1]:.3f} (separate operators, so they differ)")
-    print("REV_CHECK_DONE" if D.max() < 1e-5 else f"REV_CHECK_FAILED max diff {D.max():.2e}")
+    rel_max = (D / np.maximum(R[:, 2], 1e-9)).max()
+    print("REV_CHECK_DONE" if rel_max < 1e-5 else f"REV_CHECK_FAILED max relative diff {rel_max:.2e}")   # ~1e-5 on scores of magnitude ~18 is fp32 noise; the bar is relative
 
 
 if __name__ == "__main__":

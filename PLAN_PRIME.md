@@ -936,3 +936,56 @@ Deviation disclosed: run on a rented RTX 5090 (vast.ai instance 50261550) with t
 2.11.0+cu128, because sm_120 has no torch 2.6.0 kernels; jinx stays pinned at 2.6.0 and the
 val step, if it happens, can be reproduced there. Everything else — checkpoint, parses, splits,
 scoring path — is the P3 pipeline's.
+
+### P6 RESULT (2026-09-08 12:18-12:24 UTC, vast.ai 50261550, RTX 5090, torch 2.11.0+cu128; scripts/p6_box.sh): fail-fast NEGATIVE
+Reads: `train` only, the first 1,000 questions, plain wording and `data/para_train_terse.json`.
+Retrieval with `--rev` reproduces the P5 grid's no-confirm rows exactly on a different GPU and a
+different torch (plain 26.2 / 43.1 / 51.2 / 34.2, terse 22.0 / 36.6 / 42.9 / 28.8), so the feature
+computation changes nothing about the walk.
+
+Self-check (`rev_check.py`, 400 one-hop train questions, at the true answer): max |rev_raw − the
+model's own readout of the reverse-operator query over the whole table, at the anchor row| =
+**1.14e-05**, mean 2.07e-06, on scores of magnitude ~18 — max RELATIVE difference **3.79e-07**. On
+the 205 of those where the opposite operator is the FORWARD one (so the recomputed number is the
+table's own forward score of the triple, the wikikg2 check) the max is the same 1.14e-05. A float64
+reference of the same number sits 1.30e-05 from the batched value and 7.67e-06 from the full-table
+readout: both fp32 paths round, neither is wrong. PASS at the pre-registered ~1e-5.
+For information: the forward score of the same link and rev_raw are different numbers (mean 17.52
+vs 18.05, Pearson r 0.731) — the two directions are separate learned operators, which is the point.
+
+Out-of-fold reranking of the relational shortlist (5 folds by position, fit on the plain AND terse
+groups of the other four folds; all rows scored by `predict.py --score --limit 1000`):
+
+| wording | arm                          | Hit@1 | Hit@5 | R@20 | MRR  |
+| plain   | no reranker                  | 26.2 | 43.1 | 51.21 | 34.15 |
+| plain   | out-of-fold reranker, base   | 26.3 | 43.4 | 51.68 | 34.37 |
+| plain   | out-of-fold reranker, + rev  | 27.0 | 43.5 | 51.98 | 34.73 |
+| terse   | no reranker                  | 22.0 | 36.6 | 42.90 | 28.82 |
+| terse   | out-of-fold reranker, base   | 22.2 | 36.8 | 42.78 | 28.96 |
+| terse   | out-of-fold reranker, + rev  | 22.0 | 36.8 | 43.45 | 29.01 |
+
+rev vs base: plain **+0.7** Hit@1, +0.1 Hit@5, +0.30 R@20, +0.36 MRR; terse **−0.2** Hit@1, +0.0
+Hit@5, +0.67 R@20, +0.05 MRR.
+
+Learned weights (mean over the 5 out-of-fold fits, sd in brackets):
+  base   z +0.684 (0.038)  exact +0.904 (0.061)  exact/nm +1.000 (0.093)  rel_rrf +0.465 (0.021)  logdeg −0.267 (0.024)
+  + rev  z +0.509 (0.045)  exact +0.897 (0.061)  exact/nm +0.778 (0.095)  rel_rrf +0.438 (0.021)  logdeg −0.159 (0.033)
+         **rev_raw_max +0.475 (0.046)  rev_raw_mean +0.681 (0.107)**  rev_nov_max −0.389 (0.064)  rev_nov_mean −0.042 (0.112)
+
+DECISION: P6 fails its own pre-registered bar (+1.0 Hit@1 on plain train AND no loss on terse) on
+both halves: +0.7 plain, −0.2 terse. Not carried to val; no val paraphrases generated; no read of
+test / test-0.1 / human under any part of this step. Recorded as the fourth pre-registered negative
+of this line (after the query-time AND, the trained AND, and P5's latent-confirmed anchors).
+SUBMISSION stays P3.
+What the numbers do say, for whoever picks this up: the reverse operator is NOT noise. The reranker
+gives rev_raw_mean a weight of the same size as the walk's own z-score and takes weight away from z
+(0.684 → 0.509) and exact/nm — it is a real second opinion on the same link, and it moves Recall@20
+and MRR up on BOTH wordings, which is the shape of a useful feature that is simply too small here
+to clear a Hit@1 bar. rev_nov is the weak half: it saturates at 0 whenever the anchor dominates the
+shortlist's alternative targets (it did so for most candidates of most questions), its weight is
+negative and its sd across folds is as large as its mean. On wikikg2 the pair was worth +0.017 MRR
+against 500 OGB-supplied decoys per question; here the "alternative targets" are the walk's own
+top-100, which are already the anchor's neighbours, so the normalisation has much less to bite on.
+A next attempt would score the candidate's reverse link against a set of alternative ANCHORS
+(other entities of the anchor's type) rather than other candidates, and would be tested on the
+name-collision questions (MS / CAD / CP / HR) directly rather than on the whole slice.
