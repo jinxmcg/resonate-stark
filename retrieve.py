@@ -307,6 +307,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", required=True); p.add_argument("--split", default="val")
     p.add_argument("--limit", type=int, default=0); p.add_argument("--device", default="cuda")
+    p.add_argument("--fold", default=None, help="K:k — score only the questions at split positions p with p %% K == k (out-of-fold screens)")
     p.add_argument("--out", default=None)
     p.add_argument("--no-2hop", action="store_true", help="ablation: one-hop operators only (parser v1 coverage)")
     p.add_argument("--beta", type=float, default=0.0, help="weight of the exact-neighbour count (graph-supported constraints)")
@@ -357,6 +358,8 @@ def main():
         anchor = (emb, st, qpre)
     qa = load_qa("prime", human_generated_eval=(a.split == "human_generated_eval"))
     idx = qa.get_idx_split()[a.split].tolist() if a.split != "human_generated_eval" else list(range(len(qa)))
+    if a.fold:                                             # P9 screen: only the questions of fold k (positions p with p % K == k)
+        Kf, kf = (int(x) for x in a.fold.split(":")); idx = [i for p_, i in enumerate(idx) if p_ % Kf == kf]
     if a.limit: idx = idx[:a.limit]
     QS = json.load(open(a.queries)) if a.queries else None
     assert QS is None or not predict_only

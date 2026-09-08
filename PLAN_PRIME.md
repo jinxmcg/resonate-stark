@@ -1252,3 +1252,51 @@ Two hot spots, both fixed here, each verified to leave results unchanged:
 Also adopted for future scripts: independent retrievals run in parallel (12 cores, single-threaded
 jobs) instead of serially. A full chain (2 train + 2 val retrievals, refit, 4 scored predicts)
 should fall from ~25 minutes to ~5, which is what makes multi-arm val reads affordable.
+
+## P9 pre-registration (2026-09-08, before any run) — one trunk, three heads (-218.7M parameters)
+After P8 the pipeline is 453.8M parameters, of which THREE 110M encoders are 329.4M: the latent
+parser (which since P8 also resolves anchors), the bge_ft2 text ranker, and the p_joint text-to-latent
+trunk. All three are 12-layer/768 BERTs descended from the same BAAI/bge-base-en-v1.5, and their
+task-specific parts are tiny (0.7M + 0.22M + 0). One shared trunk with all the heads on top is
+109.5M + 1.2M = 110.7M: **-218.7M, taking the pipeline to ~235M**.
+The known risk, from P7 lever A: the text and text-to-latent tasks train a question vector to point
+at its ANSWER, while the anchor task trains it to point at the entity the question MENTIONS. Lever A
+lost 0.9 Hit@1 by using the answer-pointing encoder as an anchor resolver, and P8 gained it back by
+using the mention-pointing one. A shared trunk has to serve both, and this is the experiment that
+says whether it can.
+
+Model (shared_trunk.py, new): trunk = stock BAAI/bge-base-en-v1.5 (the neutral common ancestor, not
+any of the three fine-tunes); CLS pooling. Heads on the CLS vector h:
+  text        L2-normalised h, no parameters (the bge convention the doc matrix already uses)
+  answer type Linear(768, 10)          ops Linear(768, 36)
+  anchors     Linear(768, 3 x 2 x 144) -> 3 unit-norm complex vectors (lp's kanc=3)
+  t2l         Linear(768, 2 x 144)     -> 1 unit-norm complex vector
+Entity table: models/p_joint.pt, FROZEN — the same table lp_p3's anchor head and the p_joint t2l head
+score against today, so one table serves both heads.
+Losses, all on the same batch of questions, equal weight 1:1:1:1:1 (fixed, not tuned): answer-type
+cross-entropy; operator BCE; anchor listwise over all entities (the latent parser's loss); t2l
+listwise over all entities with the ANSWERS as positives; text InfoNCE between the question and its
+answer document with in-batch negatives (the MultipleNegativesRanking loss finetune_embed.py uses).
+Data: data/lp_labels.json — the same 12,324 weak-labelled rows (plain train questions plus their
+para_train paraphrases) the latent parser was trained on; answers and answer documents come from the
+train split and data/docs.jsonl. Optimiser AdamW, trunk 2e-5, heads 1e-3, weight decay 0.01,
+OneCycle pct_start 0.1, 3 epochs, batch 24, seed 0. Anchor similarity floor tuned exactly as
+latent_parser.py tunes it. Nothing here is searched or swept.
+
+Step 1 — SCREEN, one training, NO val read. Train the trunk on train minus fold 0 (5:0, the same
+fold convention as every out-of-fold artefact in this tree), then compare each head on fold 0's
+questions against the DEDICATED model for the same fold, which already exists and excluded the same
+questions: text vs data/oof/bgeft2_f0.json, text-to-latent vs data/oof/p_joint_f0.json, parser vs
+data/oof/lparse_train_f0.json (both parses run through retrieve.py --fold 5:0 with the P8
+configuration, --anchor lp --beta 30, so the comparison is the relational path each parse produces).
+The comparison is exactly matched: same questions, same fold exclusion, dedicated versus shared.
+BAR, fixed before running: no head more than 2.0 Hit@1 below its dedicated counterpart on fold 0.
+A head that collapses stops P9 here and is recorded, with which head and by how much — that is the
+informative outcome either way, because it localises the objective conflict.
+Step 2 — only if the screen passes, under a SEPARATE registration: train the four remaining folds
+plus a full-train trunk (six trainings in all), re-embed the corpus through the shared trunk, refit
+the rank-384 projection on the new document matrix, regenerate every ranking, refit the reranker out
+of fold, and take ONE val read against P8's 42.44 / 39.49 under the same 0.5 Hit@1 allowance.
+READS: `train` only in step 1 (fold 0 is held out from the model that is screened on it). No read of
+test / test-0.1 / human_generated_eval. Runs on the rented RTX 5090 (vast.ai 50261550) only — this
+is the first step in this line that is actually GPU-bound.
