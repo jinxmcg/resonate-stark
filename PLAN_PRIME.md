@@ -1336,3 +1336,57 @@ pulled toward the mention objective, and the text task pays for it. A corrected 
 trunk, and (b) redo the t2l screen against a fold-0-excluded table (joint_train.py --fold 5:0, ~5
 minutes, no checkpoint of it was kept). Both change a pre-registered design and need a new
 registration; neither is run here. P8's 453.8M stands as the smallest measured pipeline.
+
+## P10 pre-registration (2026-09-08, before any run) — the human proxy that was never built, and what the 7B is worth now
+Motivation. The human set is 98 questions: one question moves Hit@1 by 1.02 points and P2's
+bootstrap CI was [21.4, 39.8], so every difference observed there so far (P1 20.4, P2 30.61,
+P3 28.57, P4 25.51) is 2-5 questions and inside noise. Tuning toward that number is chasing noise.
+The only defensible route is a mechanism that fixes a NAMED failure class, validated on a proxy.
+P5 planned terse val paraphrases — the clinician's search-box shorthand that is the closest stand-in
+for human phrasing — and died at step 1 on train, so data/para_val_terse.json was never generated.
+This registration builds it and uses it to answer two open questions, then tests one mechanism.
+Nothing here changes the submission and nothing reads test or human.
+
+Step 1 — the proxy. paraphrase.py --split val --style terse --seed 3 (Qwen2.5-7B-Instruct, bf16,
+the same prompt and seed lever C used for train) -> data/para_val_terse.json. Generation is OFFLINE,
+not at query time; the rule this line keeps is no generative model when a question is ANSWERED.
+Then the inputs each arm needs for the terse wording: lp_p3 parses, bge_ft2 text ranking (full and
+rank-384), p_joint text-to-latent ranking, and llm_parse for the LLM arm.
+
+Step 2 — three candidates x three wordings (plain / natural paraphrase / terse) on val, each scored
+through predict.py --score with its OWN existing reranker; nothing is refit, nothing is tuned:
+  P3   bge anchors, full document matrix, rerank_lp_ancf_bgeft2_pjoint_aug_oof.json      (712.1M)
+  P8   parser-head anchors, rank-384 documents, rerank_p8A_lp_ancf_bgeft2_pjoint_aug_oof (453.8M)
+  LLM  the P2-era max-score pipeline: regex parse + Qwen2.5-7B override, bge anchors,
+       rerank_llm_ancf_bgeft2_pjoint_aug_oof.json
+Why the LLM arm is here: the recorded cost of dropping the 7B is -2.2 Hit@1 plain / -1.6
+paraphrased, but the lever-2c(b) block also recorded WHY — "the LLM parser adds COVERAGE rather than
+phrasing robustness", taking coverage 96.2% -> 100.0%. Since P8 every val run reports coverage
+100.0% WITHOUT the 7B, so that -2.2 is stale and has never been re-measured against the current
+pipeline. This measures it, on the wording that matters.
+DECISION RULES, fixed before running:
+ * The 7B is worth re-opening for the paper's max-score row only if it gains >= 1.0 Hit@1 over P8 on
+   TERSE val while losing no more than 0.5 on plain. Otherwise the no-LLM pipeline is confirmed on
+   human-like wording as well as on synthesized, and the stale -2.2 is corrected in the record.
+ * Between P3 and P8, the higher terse Hit@1 is the more human-robust; within 0.3 they are called
+   equal and P8 wins on parameters (453.8M vs 712.1M).
+Step 3 — the mechanism P5 named. P5's closing line: the MS / CAD / CP / HR collisions "will have to
+come from the readout over the candidate's neighbourhood (which candidate has the relation the
+question asks for), not from the question vector alone". That is exactly what P6's rev_raw computes,
+and P6 only ever tested it AVERAGED OVER THE WHOLE SLICE, where a fix to a few percent of questions
+cannot clear a +1.0 bar. Here it is tested where it was aimed: a val question is a COLLISION question
+if some matched name string resolves to two or more distinct entity ids in its parse (computed from
+the rel json, no new definition needed). retrieve.py --rev on train (plain + paraphrased) and val
+(plain + terse); the relational-shortlist reranker of rev_oof.py fit on train, base vs + the four rev
+columns; val scored on the collision subset and on the remainder separately.
+BAR, fixed before running: the rev features are carried forward only if they gain >= 2.0 Hit@1 on the
+collision subset while losing no more than 0.3 on the remainder.
+READS: train (fitting) and val (all decisions). NO read of test, test-0.1 or human_generated_eval
+under any outcome. If P10 concludes that a fifth read is worth proposing, that read is a SEPARATE
+registration and needs explicit authorisation. Box: vast.ai 50261550 (RTX 5090) only.
+FOLLOW-ON, not run here (P11, to be registered separately): the latent parser has never been trained
+on terse phrasing — lever C changed only the embedder and said so explicitly — and since P8 the
+parser's anchor head is what resolves anchors when no name matches, which is the dominant human
+failure. data/lp_labels.json holds 12,324 rows (plain + natural paraphrase) whose labels are per
+QUESTION, so terse rows reuse the same answer type, anchors and operators: 18,486 rows, one
+retraining. P10's proxy is what makes P11 measurable.
