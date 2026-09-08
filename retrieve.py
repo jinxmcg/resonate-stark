@@ -293,7 +293,7 @@ def main():
     p.add_argument("--out", default=None)
     p.add_argument("--no-2hop", action="store_true", help="ablation: one-hop operators only (parser v1 coverage)")
     p.add_argument("--beta", type=float, default=0.0, help="weight of the exact-neighbour count (graph-supported constraints)")
-    p.add_argument("--anchor", default=None, help="text-resolve anchors for queries without an exact mention: bge")
+    p.add_argument("--anchor", default=None, help="text-resolve anchors for queries without an exact mention: bge | bgeft | bgeft2 (bgeft2 reuses the text ranker's encoder and data/doc_emb_bgeft2.npy)")
     p.add_argument("--anchor-top", type=int, default=2)
     p.add_argument("--anchor-weight", type=float, default=0.7)
     p.add_argument("--queries", default=None, help="json {query_id: text} replacing the question text (paraphrase proxy; train/val only)")
@@ -327,7 +327,7 @@ def main():
     if a.anchor:
         from sentence_transformers import SentenceTransformer
         emb = torch.from_numpy(np.load(f"data/doc_emb_{a.anchor}.npy").astype(np.float32)).to(dev)
-        st = SentenceTransformer({"bge": "BAAI/bge-base-en-v1.5", "bgeft": "models/bge_ft"}[a.anchor], device=str(dev))
+        st = SentenceTransformer({"bge": "BAAI/bge-base-en-v1.5", "bgeft": "models/bge_ft", "bgeft2": "models/bge_ft2"}[a.anchor], device=str(dev))   # P7: bgeft2 is the text ranker's own encoder — one encoder and one doc matrix instead of two
         qpre = "Represent this sentence for searching relevant passages: "
         anchor = (emb, st, qpre)
     qa = load_qa("prime", human_generated_eval=(a.split == "human_generated_eval"))
@@ -346,7 +346,7 @@ def main():
     LPZ = json.load(open(a.lparse)) if a.lparse else None
     rel_ids = {v: int(k) for k, v in dicts["edge_type_dict"].items()}
     type_ok = set(tn.values()); n_llm_type = n_llm_ent = 0
-    rows_all, rows_cov, out, n_cov, n_type, t0 = [], [], {}, 0, 0, time.time(); rows_multi, rows_single = [], []
+    rows_all, rows_cov, out, n_cov, n_type, t0 = [], [], {}, 0, 0, time.time(); rows_multi, rows_single = [], []; n_anc_fb = 0
     for j, i in enumerate(idx):
         q, qid, ans, _ = qa[i]
         if QS is not None: q = QS.get(str(int(qid)), q)
@@ -401,7 +401,7 @@ def main():
                 if w and float(sims[i_]) > -1e8:
                     ments.append((i_, names[str(i_)].lower(), mt, w)); n_llm_ent += 1
         if anchor is not None and at is not None and not ments:
-            emb, st, qpre = anchor
+            emb, st, qpre = anchor; n_anc_fb += 1
             qv = torch.from_numpy(st.encode([qpre + q], convert_to_numpy=True, normalize_embeddings=True)).to(dev)[0]
             sims = emb @ qv
             ok = torch.zeros_like(sims, dtype=torch.bool)
@@ -441,7 +441,7 @@ def main():
             out[int(qid)]["feats"] = fe
         if j % 500 == 0:
             print(j, round(time.time() - t0), "s", flush=True)
-    print(f"{a.split}: n={len(idx)}  answer type found {n_type}  covered (>=1 usable mention) {n_cov} ({n_cov/len(idx):.1%})" + (f"  LLM: type fallback used {n_llm_type}, entity anchors {n_llm_ent}" if LP else "") + (f"  confirm: kept {n_conf_kept}, dropped {n_conf_dropped}" if CONF is not None else ""))
+    print(f"{a.split}: n={len(idx)}  answer type found {n_type}  covered (>=1 usable mention) {n_cov} ({n_cov/len(idx):.1%})" + (f"  LLM: type fallback used {n_llm_type}, entity anchors {n_llm_ent}" if LP else "") + (f"  confirm: kept {n_conf_kept}, dropped {n_conf_dropped}" if CONF is not None else "") + (f"  text-anchor fallback used on {n_anc_fb}" if anchor is not None else ""))
     if rows_all:
         print("relational-only, all queries (uncovered count as misses):", {k: round(v, 4) for k, v in summarize(rows_all).items()})
     if rows_cov:

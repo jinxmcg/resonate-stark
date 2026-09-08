@@ -989,3 +989,52 @@ top-100, which are already the anchor's neighbours, so the normalisation has muc
 A next attempt would score the candidate's reverse link against a set of alternative ANCHORS
 (other entities of the anchor's type) rather than other candidates, and would be tested on the
 name-collision questions (MS / CAD / CP / HR) directly rather than on the whole slice.
+
+## P7 pre-registration (2026-09-08, before any run) — one anchor encoder, one table (size, not score)
+Measured footprint of the SCORED P3 pipeline (not the ask.py demo, which loads three of the four):
+| component | on disk | params |
+| lp_p3.pt — latent parser (encoder + 0.7M heads) | 420 MB | 110.2M fp32 |
+| BAAI/bge-base-en-v1.5 — anchor fallback (retrieve.py --anchor bge) | 419 MB | 109.5M |
+| data/doc_emb_bge.npy — its 129,375 x 768 doc matrix | 190 MB | fp16 |
+| bge_ft2 — text ranker | 419 MB | 109.5M |
+| data/doc_emb_bgeft2.npy — its doc matrix | 190 MB | fp16 |
+| p_joint_enc + p_joint_head.pt — text-to-latent trunk (+0.22M head) | 420 MB | 109.7M |
+| p_joint.pt — the table the text-to-latent readout scores against | 142 MB | 129,375 x 144 complex |
+| p_k12b4_50k.pt — the table the walk scores against, + 36 operators | 142 MB | same |
+| TOTAL | ~2.34 GB | four 110M encoders, two tables, two doc matrices |
+Two things the record already settles, so they are not tested here: the text-to-latent branch
+cannot be dropped (without it 35.6 Hit@1, with it 43.5 — the largest single lever in P2), and one
+table can in principle serve both (lever 5: joint table on the walk 24.3 vs 24.9 Hit@1 with Hit@5 /
+R@20 / MRR slightly up, and better held-out link MRR 0.5680 vs 0.5574).
+
+The two levers, both configuration only — NO retraining, no new component, no LLM:
+ A. The anchor fallback resolves names with an UN-fine-tuned bge-base against its own doc matrix,
+    while bge_ft2 — a fine-tune of that same model — is already loaded for the text ranker.
+    `--anchor bgeft2` (one line in retrieve.py's model map; data/doc_emb_bgeft2.npy already exists,
+    built by embed_text2.py with the identical prefix, pooling and L2 normalisation) removes one
+    encoder and one doc matrix: -609 MB.
+ C. The walk runs on models/p_joint.pt, the table the text-to-latent readout already uses
+    (same shape, same operator set, same loader): -142 MB, and it makes "one table answers graph
+    queries and language questions" true of the shipped pipeline rather than of a side experiment.
+Together: 2.34 GB -> 1.59 GB (-32%), three encoders instead of four, one table, one doc matrix.
+
+Step 1 — fail-fast, TRAIN only (this step): the first 1,000 train questions, plain wording and the
+terse paraphrases (data/para_train_terse.json), relational path only, `--beta 30 --lparse` with the
+same lp_p3 parses used by P5 and P6 (data/lparse_train_full.json, data/lparse_train_terse.json),
+anchor-top 2, anchor-weight 0.7, k 100. Four arms:
+  0.  --model p_k12b4_50k --anchor bge      (the current P3 configuration, the reference)
+  A.  --model p_k12b4_50k --anchor bgeft2
+  C.  --model p_joint     --anchor bge
+  AC. --model p_joint     --anchor bgeft2
+Also reported: how many of the 1,000 questions reach the text-anchor fallback at all (the only
+questions lever A can move) — retrieve.py now counts it.
+BAR, fixed before running: arm AC's Hit@1 not more than 1.0 below arm 0 on plain AND not more than
+1.0 below on terse. A size reduction is bought, not free, but more than a point of the relational
+path is too much to pay for it.
+Step 2 — if the bar is met, on `val`, under a SEPARATE registration written before that run: the
+full P3 chain with the AC configuration (train retrievals plain + paraphrased with the out-of-fold
+parses, reranker refit out of fold, val scored plain and paraphrased through predict.py --score),
+decision bar there: not more than 0.5 Hit@1 below P3's val (42.3 plain / 39.7 paraphrased) on
+either wording, for the 750 MB.
+READS: `train` only in step 1. No read of test / test-0.1 / human_generated_eval under any outcome.
+Same disclosed deviation as P6: the rented RTX 5090 (vast.ai 50261550) with torch 2.11.0+cu128.
