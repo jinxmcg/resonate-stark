@@ -83,6 +83,7 @@ def main():
     p.add_argument("--lr", type=float, default=2e-5); p.add_argument("--lr-head", type=float, default=1e-3)
     p.add_argument("--kanc", type=int, default=3); p.add_argument("--seed", type=int, default=0)
     p.add_argument("--max-len", type=int, default=128); p.add_argument("--doc-len", type=int, default=256)
+    p.add_argument("--w-text", type=float, default=1.0, help="P15: weight of the text-ranking loss (P9 used 1.0 and the text head was the one that lost)")
     a = p.parse_args(); torch.manual_seed(a.seed); dev = torch.device("cuda")
     graph, n_rel = load_model(a.model, dev); E = graph.table().detach()
     dicts = json.load(open("data/dicts.json")); tn = {int(k): v for k, v in dicts["node_type_dict"].items()}
@@ -121,7 +122,7 @@ def main():
                 dq = net.text(h); dd = net.text(net.h(denc))                          # in-batch negatives, bge convention
                 sim = dq @ dd.t() * 20.0
                 l_txt = F.cross_entropy(sim, torch.arange(len(batch), device=dev))
-                loss = l_type + l_ops + l_anc + l_t2l + l_txt
+                loss = l_type + l_ops + l_anc + l_t2l + a.w_text * l_txt
                 opt.zero_grad(); loss.backward(); torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0); opt.step(); sched.step(); step += 1
                 tot += [l_type.item(), l_ops.item(), l_anc.item(), l_t2l.item(), l_txt.item()]; nb += 1
                 if step % 100 == 0:

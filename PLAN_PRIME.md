@@ -1681,3 +1681,48 @@ standard deviation of the two arms. If the two distributions overlap by that mea
 recorded as indistinguishable on shorthand, P11's parameter advantage (453.8M vs 712.1M) becomes the
 only difference, and the choice between them stops being an empirical question.
 READS: val only. A fifth read remains a separate registration requiring explicit authorisation.
+
+## P14 pre-registration (2026-09-08, before any run) — is a biomedical embedder more robust to clinical shorthand?
+The text ranker is the component that collapses hardest on shorthand: bge_ft2 falls from 21.9 Hit@1
+on plain val to 15.1 on the terse proxy. bge-base-en-v1.5 was pretrained on general web text; a
+biomedical encoder has seen gene symbols, drug names and clinical abbreviations, which is exactly the
+register that breaks it. Lever C is the warning: it refit the embedder on cleaner and terse
+paraphrases, gained on the text ranker alone (plain 22.0 vs 21.9, paraphrased 20.7 vs 19.6) and LOST
+in the pipeline (−0.5 / −0.3 over three seeds) because with three ranking sources the text ranker's
+marginal contribution saturates. So a text-ranker gain is not the thing to measure, and fine-tuning
+a new embedder properly costs five out-of-fold folds (~1.5 h) that should not be spent on a hunch.
+SCREEN (this step): STOCK against STOCK, no fine-tuning, so that domain pretraining is isolated from
+the train-question fine-tuning that bge_ft2 has and a fresh model would not.
+  models: BAAI/bge-base-en-v1.5 (the incumbent's base), NeuML/pubmedbert-base-embeddings,
+          abhinand/MedEmbed-base-v0.1
+  each embeds the same 129,375 node documents and ranks val questions in four wordings: plain,
+  terse A (Qwen), terse B (Phi), terse C (OpenBioLLM).
+The quantity that decides it is NOT the absolute score — bge_ft2 has seen the train questions and
+will beat all three stock models — but the RELATIVE RETENTION: each model's shorthand Hit@1 as a
+fraction of its own plain Hit@1, averaged over the three registers.
+BAR, fixed before running: a biomedical model earns the fine-tuning budget only if its mean shorthand
+retention exceeds stock bge's by at least 3 percentage points. Below that, domain pretraining is not
+buying robustness to this register and P14 stops with a recorded negative.
+READS: val only. Box: vast.ai 50209059.
+
+## P15 pre-registration (2026-09-08, before any run) — the shared trunk, with the conflict priced in
+P9 screened one trunk with three heads and failed on ONE head: the text ranker, −2.11 Hit@1 against
+its dedicated fold-0 counterpart, while the parser head GAINED +0.49. All five losses were weighted
+1:1:1:1:1, and three of the five (answer type, operators, anchors) pull the trunk toward pointing at
+the entity a question MENTIONS while the text and text-to-latent losses pull it toward the ANSWER.
+The trunk went where the majority of the gradient pointed and the text ranker paid. The prize is
+unchanged: 329.4M of encoder collapses to 110.4M, −218.7M, the largest single cut left.
+Two repairs, each one training, screened exactly as P9 was (train without fold 0, compare each head
+on fold 0 against the dedicated model that excluded the same fold):
+  W3  the text loss weighted 3x, everything else unchanged
+  W6  the text loss weighted 6x, everything else unchanged
+shared_trunk.py gains --w-text (default 1.0); nothing else about the model or the recipe changes.
+BAR, fixed before running: the SAME bar P9 failed — no head more than 2.0 Hit@1 below its dedicated
+counterpart on fold 0. If a weighting passes, the full six-fold build and one val read follow under a
+separate registration. If both fail, the conclusion recorded is that the mention/answer conflict is
+not a matter of loss balance and one trunk cannot serve both, which closes the shared-trunk line.
+CORRECTION carried from P9: the text-to-latent head there was screened against a table the shared
+trunk had been trained on while its dedicated counterpart had not, which voided that row. Here the
+t2l head is reported for information only and is NOT part of the bar, because no fold-matched table
+exists (joint_train.py's fold runs return before saving a checkpoint).
+READS: train only — fold 0 is held out from the model screened on it. Box: vast.ai 50270859.
