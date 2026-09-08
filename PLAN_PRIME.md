@@ -1390,3 +1390,36 @@ parser's anchor head is what resolves anchors when no name matches, which is the
 failure. data/lp_labels.json holds 12,324 rows (plain + natural paraphrase) whose labels are per
 QUESTION, so terse rows reuse the same answer type, anchors and operators: 18,486 rows, one
 retraining. P10's proxy is what makes P11 measurable.
+
+## P11 pre-registration (2026-09-08, before any run) — the parser trained on terse phrasing
+The gap lever C left open, stated in its own text: "the augmentation set for the parser and the
+reranker's paraphrased groups stays para_train.json (unchanged) so ONLY THE EMBEDDER changes."
+Lever C then failed and was dropped, and the terse train paraphrases it generated
+(data/para_train_terse.json, all 6,162 questions) have been used by nothing since.
+Why it matters more now than it did then: since P8 the latent parser's anchor head is what resolves
+the anchor when no name matches — it replaced the fourth encoder — and the proxy error analysis puts
+64% of rewording losses on missed anchors, 74% of those real aliases and descriptions. The component
+that must survive human phrasing has never been shown any. Terse is that phrasing
+("filensin lens support ocular" for a full sentence about filensin).
+Design (nothing else changes; ONE thing moves):
+ * Labels: data/lp_labels_terse.json = the existing 12,324 rows of data/lp_labels.json (plain +
+   natural paraphrase) plus 6,162 terse rows. The weak labels are per QUESTION — answer type, anchor
+   ids, operator vector — so a terse row reuses its question's labels verbatim and only the text
+   differs; the row's train position is unchanged, so every fold filter keeps working. 18,486 rows.
+ * Training: latent_parser.py --train --tag lp_p4t --labels data/lp_labels_terse.json with lp_p3's
+   hyperparameters untouched (encoder models/p_joint_enc, table models/p_joint.pt, kanc 3, 3 epochs,
+   batch 32, seed 0, the trained anchor floor). Then the five out-of-fold parsers (--fold 5:k, same
+   labels) so the reranker's train features stay out of fold, exactly as lp_p3's chain built them.
+ * Pipeline: the P8 configuration with the new parser in BOTH of its roles — --lparse from lp_p4t
+   and --anchor lp --lp-anchor models/lp_p4t.pt. The reranker is refit on the new train retrievals
+   with the SAME group structure as now (plain + natural paraphrase); terse is deliberately NOT added
+   to the reranker's groups, so the parser is the only thing that changed.
+ * Measured on val in three wordings: plain, natural paraphrase, terse (P10's proxy).
+BAR, fixed before running: terse val Hit@1 at least 1.0 ABOVE P8's terse number, AND plain val Hit@1
+no more than 0.3 below P8's plain. This is P5's shape — help the human-like wording without hurting
+plain — applied to the component that actually reads the words.
+READS: train (labels, training, retrievals, the reranker fit) and val (the decision). No read of
+test, test-0.1 or human_generated_eval under any outcome. Depends on P10 step 1 for the terse val
+proxy and on P10 step 2 for P8's terse number, so it runs after P10. Box: vast.ai 50261550 only.
+Cost: six parser trainings (~4-5 minutes each at 18,486 rows), five fold predictions, five
+retrievals, one reranker refit, three scored val runs.
