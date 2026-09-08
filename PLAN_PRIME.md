@@ -1038,3 +1038,33 @@ decision bar there: not more than 0.5 Hit@1 below P3's val (42.3 plain / 39.7 pa
 either wording, for the 750 MB.
 READS: `train` only in step 1. No read of test / test-0.1 / human_generated_eval under any outcome.
 Same disclosed deviation as P6: the rented RTX 5090 (vast.ai 50261550) with torch 2.11.0+cu128.
+
+### P7 STEP 1 RESULT (2026-09-08 12:42-12:46 UTC, vast.ai 50261550, RTX 5090; scripts/p7_box.sh): BAR MET, and one lever is a gain
+1,000 train questions, plain wording and terse paraphrases, relational path only, lp_p3 parses.
+Arm 0 reproduces P5's and P6's rows exactly, so the arms are comparable line for line.
+The text-anchor fallback — the only thing lever A can touch — fires on 63 of the 1,000 plain
+questions and 110 of the terse ones.
+
+| arm | configuration                | plain Hit@1 / Hit@5 / R@20 / MRR | terse Hit@1 / Hit@5 / R@20 / MRR | query-time size |
+| 0   | bge anchors + p_k12b4_50k (P3) | 26.2 / 43.1 / 51.21 / 34.15 | 22.0 / 36.6 / 42.90 / 28.82 | 2.34 GB |
+| A   | bge_ft2 anchors + p_k12b4_50k  | 25.3 / 42.4 / 49.91 / 33.18 | 21.3 / 35.1 / 41.32 / 27.92 | 1.73 GB |
+| C   | bge anchors + p_joint          | **29.2 / 45.9 / 52.73 / 37.29** | **24.1 / 38.5 / 44.90 / 31.10** | 2.20 GB |
+| AC  | bge_ft2 anchors + p_joint      | 28.2 / 45.1 / 51.42 / 36.26 | 23.4 / 37.3 / 43.61 / 30.15 | 1.59 GB |
+
+Against arm 0: A −0.9 plain / −0.7 terse; C **+3.0 / +2.1**; AC **+2.0 / +1.4**.
+BAR (arm AC not more than 1.0 Hit@1 below arm 0 on either wording): MET — AC is 2.0 and 1.4 ABOVE
+it. The 751 MB is not bought at a price; it comes with a gain on the relational path.
+
+Two readings, both worth keeping:
+* Lever C is not a compression, it is an improvement. Lever 5 had measured the joint table on the
+  walk as −0.6 Hit@1 with the P2-era parser and the LLM override; with the lp_p3 parser it is +3.0
+  plain / +2.1 terse. The table trained on edges AND questions is simply a better table for the
+  walk once the parser reads the question into that same space — which is the architecture claim of
+  this line, now true of the shipped pipeline rather than of a side experiment, and it removes the
+  second entity table (−142 MB).
+* Lever A does cost something: −0.9 / −0.7 Hit@1, spread over the 63 / 110 questions that reach the
+  fallback, i.e. a large relative loss on those. Plausible reason: bge_ft2 was fine-tuned to point a
+  QUESTION at its ANSWER documents, so its question vector is a worse resolver for the entity the
+  question MENTIONS than the un-fine-tuned bge, which is a generic semantic matcher. The 609 MB is
+  therefore a real trade, not a free one, and step 2 measures both C and AC so the trade can be made
+  on full-pipeline numbers rather than on the relational path alone.
