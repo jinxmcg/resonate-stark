@@ -1726,3 +1726,34 @@ trunk had been trained on while its dedicated counterpart had not, which voided 
 t2l head is reported for information only and is NOT part of the bar, because no fold-matched table
 exists (joint_train.py's fold runs return before saving a checkpoint).
 READS: train only — fold 0 is held out from the model screened on it. Box: vast.ai 50270859.
+
+### P13 AMENDMENT RESULT (2026-09-08 16:45-16:53 UTC, vast.ai 50261550; scripts/p13_seeds_p3.sh): the comparison was against an unlucky draw; P11 passes its bar and the bar turns out to be the wrong question
+lp_p3 retrained at seeds 1 and 2 on the original labels; both arms now three seeds, mean against mean:
+| wording          | P3 mean ± sd  | P11 mean ± sd | P11 − P3 |
+| plain            | 42.79 ± 0.46  | 42.50 ± 0.49  | **−0.30** |
+| terse A (Qwen)   | 33.97 ± 0.28  | 34.51 ± 0.17  | +0.54 |
+| terse B (Phi)    | 33.02 ± 0.12  | 33.21 ± 0.23  | +0.19 |
+| terse C (medical)| 35.72 ± 0.36  | 36.01 ± 0.08  | +0.30 |
+Shorthand advantage averaged over the three registers: +0.343 Hit@1, against a pooled across-seed
+standard deviation of 0.128 (standard error of the two means 0.107). The amendment's bar — advantage
+exceeds the pooled spread — PASSES, and P11's plain deficit of 0.30 is inside P13's 0.5 allowance.
+So P11 is genuinely the more shorthand-robust system, and it pays 0.30 of plain wording for it.
+FIRST CORRECTION, and it reaches backwards. lp_p3's seed 0 — the single draw every comparison in this
+line has used — is its UNLUCKY one: 42.26 on plain against 43.06 and 43.06 at seeds 1 and 2. P8's
+reported "+0.18 on plain over P3" (P10) and P11's "+0.24" (P13) were both measured against that low
+draw and both shrink or invert against the mean. P8 versus P3 is WORSE than P10 recorded, not better.
+Every single-seed comparison in this project should be read with that in mind.
+SECOND, AND DECISIVE: the bar was answerable but it is not the question that matters. A +0.343 Hit@1
+advantage on the 98-question human set is 0.34 QUESTIONS. One question there is worth 1.02 Hit@1
+points and P2's recorded 95% bootstrap CI on that set spans 18.4 points. No read of the human set can
+resolve a third of a question. A fifth read spent to choose between P3 and P11 would be measuring a
+difference three times smaller than the instrument's smallest unit, and would return a number whose
+sign is set by which five questions happen to fall which way.
+DECISION: P11 is NOT proposed for a fifth read, despite passing. SUBMISSION stays P3, which already
+has its read (test 43.09 / test-0.1 41.79 / human 28.57). P11 is reported in the paper as the variant
+that is more robust to clinical phrasing across three independent registers and three seeds AND 36%
+smaller (453.8M against 712.1M), carried by val evidence rather than by a leaderboard row. P8 is
+reported as the parameter result and is not a filing candidate.
+This is the same conclusion the decision rule of 2026-09-07 would reach — publish the best model and
+architecture, not the best score — arrived at from the other direction: the score difference is not
+measurable, so only the architecture argument remains, and it is made in the paper.
