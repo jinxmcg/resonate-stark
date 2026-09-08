@@ -1568,3 +1568,40 @@ proxies disagree in sign on either claim, the honest conclusion is that neither 
 statement about human phrasing, and that is what will be written.
 READS: val only (the proxy is generated from val question text, which development already reads).
 No read of test, test-0.1 or human_generated_eval. Box: vast.ai 50261550.
+
+### P12 RESULT (2026-09-08 15:37-15:52 UTC, vast.ai 50261550; scripts/p12.sh): the held-out style holds up as a proxy, and it reorders P3 and P8
+First attempt aborted at the guard: --trust-remote-code loaded Phi-3.5's bundled modelling code,
+which is stale against the box's transformers 5.16.1 (DynamicCache has no attribute seen_tokens).
+Dropping the flag uses the maintained native implementation. The guard added after P11 did its job —
+it stopped instead of running a chain of no-ops to a fake DONE.
+The held-out proxy is genuinely held out (data/para_val_terse_b.json, Phi-3.5-mini-instruct,
+--style terse2, a prompt rewritten from scratch):
+  terse A (Qwen)  median 7 words, contains its own answer name 5.6%
+  terse B (Phi)   median 7 words, contains its own answer name 5.2%   (plain-val baseline 4.6%)
+  identical rewrites between the two proxies: 7 of 2,241 (0.3%)
+Same compression target, almost entirely different wording, and B is marginally CLEANER than A on
+the leakage measure. A gain that survives from A to B is not dialect matching.
+
+Val Hit@1 on both shorthand proxies, each arm with its own reranker, nothing refit:
+| arm | terse A (Qwen) | terse B (Phi, held out) | vs P8 on A | vs P8 on B |
+| P3  | 34.09 | 32.93 | +0.13 | **+0.71** |
+| P8  | 33.96 | 32.22 |  —    |  —    |
+| P11 | 34.58 | **33.15** | +0.62 | **+0.93** |
+| LLM (Qwen-7B pipeline) | 31.50 | 31.06 | −2.46 | −1.16 |
+DECISION RULE (sign kept AND at least half the magnitude on the held-out style):
+ * P11's advantage over P8: +0.62 -> +0.93. Sign kept, magnitude GREW. SURVIVES, comfortably. The
+   parser trained on terse phrasing is robustly better on shorthand than the parser that was not,
+   and it is better on a style it never saw. P11 still fails its OWN P11 bar (+1.0 over P8 on terse
+   A), which is not revisited — but its effect is now established as style-general, not dialect.
+ * The 7B pipeline's deficit: −2.46 -> −1.16. Sign kept emphatically; magnitude is 47% of the
+   original, so by the LETTER of the rule ("at least half", i.e. at most −1.23) it misses by 0.07 and
+   does not qualify. Recorded as written rather than rounded: the DIRECTION is confirmed on two
+   independent styles — the 7B pipeline is worse than every no-LLM arm on shorthand, on both — while
+   the SIZE of the deficit is style-dependent and should not be quoted as a single number.
+UNPLANNED AND MORE IMPORTANT: the held-out style REORDERS P3 and P8. On terse A they were 0.13
+apart, inside P10's 0.3 "called equal" band, which is what let P8 win on parameters. On terse B, P3
+is 0.71 ahead — outside it. Collecting every wording measured:
+  P8 vs P3:  plain +0.18 | natural −0.22 | terse A −0.13 | terse B −0.71
+P8 leads only on template wording, and its deficit GROWS the further the phrasing moves from the
+training distribution. P10's "called equal on terse, so P8 wins on parameters" rested on a single
+proxy and does not survive a second one. P8's advantage is parameter count alone.
