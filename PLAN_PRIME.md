@@ -1097,3 +1097,42 @@ work moves to the levers that do not touch the anchors (fp16 storage, doc-matrix
 READS: `train` (retrievals and the reranker fit) and `val` (the decision). No read of test,
 test-0.1 or human_generated_eval under any outcome. Same disclosed deviation: vast.ai 50261550,
 RTX 5090, torch 2.11.0+cu128.
+
+### P7 STEP 2 RESULT (2026-09-08 12:50-13:17 UTC, vast.ai 50261550, RTX 5090; scripts/p7_step2.sh): BOTH CANDIDATES INADMISSIBLE by the pre-registered rule
+Control first: P3 as it stands, re-run from scratch on this box with the existing reranker,
+reproduces the recorded numbers to four decimals — 42.26 / 68.32 / 75.48 / 53.93 plain and
+39.71 / 63.94 / 71.80 / 51.09 paraphrased. The step is valid.
+
+Full pipeline on val (reranker refit out of fold per candidate, per-type weights, w 0.45, scored
+through predict.py --score):
+| candidate | query-time size | plain Hit@1 / Hit@5 / R@20 / MRR | paraphrased Hit@1 / Hit@5 / R@20 / MRR |
+| P3 (control)              | 2.34 GB | 42.26 / 68.32 / 75.48 / 53.93 | 39.71 / 63.94 / 71.80 / 51.09 |
+| C  (joint table)          | 2.20 GB | 42.21 / 68.50 / 74.92 / 53.73 | 39.13 / 63.86 / 71.10 / 50.48 |
+| AC (joint table + shared anchor encoder) | 1.59 GB | 42.12 / 68.18 / 74.72 / 53.68 | 39.00 / 63.05 / 70.94 / 50.22 |
+Against P3: C −0.05 plain / −0.58 paraphrased Hit@1; AC −0.14 plain / −0.71 paraphrased.
+DECISION RULE (admissible = not more than 0.5 Hit@1 below P3 on EITHER wording): C fails on the
+paraphrased set by 0.08, AC by 0.21. Both inadmissible. P3 STANDS; the 751 MB is not taken.
+The margins are 13 and 16 questions of 2,241 and well inside the set's noise, but the bar was fixed
+before the run and is applied as written. Taking AC anyway would be a choice made after seeing the
+numbers; it is available (data/rerank_p7AC_lp_ancf_bgeft2_pjoint_aug_oof.json and the retrievals are
+kept) and would have to be recorded as such, not as a bar that was met.
+
+CORRECTION to P7 step 1, which this step exposes: arm C's +3.0 / +2.1 Hit@1 on 1,000 TRAIN questions
+was measured IN SAMPLE. models/p_joint.pt is the table joint_train.py fit on PrimeKG's edges AND on
+the train questions, so a train question is one the joint table was trained to answer, while the
+edges-only table p_k12b4_50k never saw it. On val the same lever is −0.05 plain / −0.58 paraphrased.
+The P5/P6-style fail-fast on train is therefore INVALID for any lever that changes the entity table
+(and remains valid for levers that do not — P6 used the edges-only table, and arms 0 and A here are
+unaffected). Any future table lever must fail-fast on a held-out slice of train that joint_train.py
+did not see, or go straight to val. Recorded so the next session does not repeat it.
+
+What the step does establish, for the size work that continues: neither lever is damaging. A 32%
+smaller pipeline — one entity table instead of two, and the anchor fallback reusing the text
+ranker's own encoder and doc matrix instead of a second, un-fine-tuned copy of the same model —
+costs 0.14 Hit@1 on plain val and 0.71 on paraphrased. The remaining size levers (fp16 storage for
+the encoders and tables, a compressed doc matrix, one shared trunk with three heads, a smaller
+trunk) are untouched by this result, and the shared-trunk lever now carries a warning from step 1:
+bge_ft2's question vector is a WORSE anchor resolver than un-fine-tuned bge (−0.9 / −0.7 on the
+relational path), because it was fine-tuned to point a question at its answer rather than at the
+entity the question mentions. A shared trunk would inherit that conflict and needs a head that
+keeps generic mention-matching behaviour.
