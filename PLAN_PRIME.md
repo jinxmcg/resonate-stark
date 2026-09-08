@@ -1640,3 +1640,44 @@ therefore harder on P11 than on P3, deliberately.
 READS: val only. NO read of test, test-0.1 or human_generated_eval. Even if the bar passes, the
 fifth read is a SEPARATE registration and requires explicit authorisation — passing here only makes
 P11 a candidate worth proposing. Box: vast.ai 50261550.
+
+### P13 RESULT (2026-09-08 16:28-16:43 UTC, vast.ai 50261550; scripts/p13.sh): BAR PASSED on all three clauses
+Step 1, the medical-register proxy. aaditya/Llama3-OpenBioLLM-8B under the terse2 prompt; the feared
+failure mode (a model tuned to ANSWER medical questions answering instead of compressing) did not
+happen — it is the CLEANEST of the three proxies:
+  plain val baseline            median 21 words, contains its own answer name 4.6%
+  A Qwen2.5-7B                  median  7 words, 5.6%
+  B Phi-3.5-mini                median  7 words, 5.2%
+  C OpenBioLLM-8B (medical)     median 12 words, 4.7%   identical to A 0.6%, to B 0.2%
+Three independent registers at three compression levels. C compresses least — clinical phrasing
+rather than keyword soup — and every arm scores higher on it than on A or B. Which of the three is
+closest to the human set cannot be checked: measuring the human questions' length distribution would
+itself be a read of that split.
+Steps 2 and 3, val Hit@1, P11 at three parser seeds against P3, each arm with its own reranker:
+| wording                  | P11 seed 0 / 1 / 2   | P11 mean ± sd | P3    | advantage |
+| plain                    | 41.95 / 42.88 / 42.66 | 42.50 ± 0.40 | 42.26 | +0.24 |
+| terse A (Qwen)           | 34.58 / 34.63 / 34.32 | 34.51 ± 0.14 | 34.09 | +0.42 |
+| terse B (Phi)            | 33.15 / 33.47 / 33.02 | 33.21 ± 0.19 | 32.93 | +0.28 |
+| terse C (OpenBioLLM)     | 35.97 / 35.97 / 36.10 | 36.01 ± 0.06 | 35.30 | **+0.71** |
+Per-seed advantage averaged over the three shorthand registers: +0.46, +0.58, +0.37.
+BAR: (a) positive at every seed — YES. (b) mean advantage 0.472 against an across-seed sample sd of
+0.106, i.e. 4.5x the noise — YES. (c) plain at the seed mean 42.50, ABOVE P3's 42.26 rather than
+below it — YES. P13 PASSES and P11 becomes a candidate worth proposing for a fifth read.
+Two things this corrects. P11's reported "−0.31 on plain" was seed 0 being an unlucky draw: across
+three seeds P11 is +0.24 on plain, and the plain wording is the NOISIEST (sd 0.40) while the
+shorthand registers are the most stable (sd 0.06-0.19). And the advantage is largest and steadiest
+on the medical register, which is the one that most resembles a person writing a clinical question.
+NOT YET A DECISION, and the reason was registered in advance: this compares P11's three-seed mean
+against P3's SINGLE draw. lp_p3's own seed variance has never been measured, and P11's plain seeds
+spanned 0.93. Before P11 is proposed for a read, P3 gets the same treatment.
+
+### P13 AMENDMENT (2026-09-08, written before the run) — P3's own seed variance, for symmetry
+latent_parser.py --train --tag lp_p3_s1 / _s2 --seed 1 / 2 on the ORIGINAL data/lp_labels.json
+(12,324 rows, plain + natural paraphrase — no terse), lp_p3's hyperparameters otherwise untouched,
+the P3 reranker and fold parsers held fixed exactly as P11's were. Scored on the same four wordings.
+DECISION RULE, fixed before running: P11 is proposed for a fifth read only if its three-seed
+shorthand mean still exceeds P3's THREE-SEED shorthand mean by more than the pooled across-seed
+standard deviation of the two arms. If the two distributions overlap by that measure, the arms are
+recorded as indistinguishable on shorthand, P11's parameter advantage (453.8M vs 712.1M) becomes the
+only difference, and the choice between them stops being an empirical question.
+READS: val only. A fifth read remains a separate registration requiring explicit authorisation.
