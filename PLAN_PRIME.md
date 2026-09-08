@@ -1517,3 +1517,25 @@ kind of change that would move the read reliably.
 Follow-ons this points at, neither run nor registered: weight the terse rows below the plain ones
 instead of 1:1, or add terse only to the ANCHOR loss (the head P8 made load-bearing) rather than to
 the answer-type and operator heads as well, so the trade is taken only where the failure is.
+
+### METHODOLOGICAL CAVEAT (2026-09-08, raised by the user after P11): the proxy trains and tests the SAME generated style
+P11 trains the parser on data/para_train_terse.json and is judged on data/para_val_terse.json. Split
+hygiene is clean — the training text comes from TRAIN questions, the evaluation text from VAL
+questions, and neither test nor human is involved — but both files come from the SAME generator, the
+SAME prompt and the same style setting (paraphrase.py --style terse, Qwen2.5-7B-Instruct). So part of
+P11's +0.62 on terse is not robustness to human shorthand; it is having learned one model's dialect
+of shorthand — its particular abbreviations, its particular dropping patterns — and then being tested
+on that dialect. How much of the gain transfers to real human phrasing cannot be read off this
+measurement.
+This is not specific to P11. bge_ft2, the text ranker in every pipeline since P2, was fine-tuned on
+data/para_train.json and is evaluated on data/para_val.json — same script, same prompt, same model.
+The whole "paraphrased val" column from P2 through P11 shares the property. P11 only makes it
+explicit by training on the style deliberately.
+The precedent that shows the risk is real and already cost this project a read: P4's selector gained
++2.1 plain / +1.0 paraphrased on val and LOST 5.1 Hit@1 on the human set, and the recorded conclusion
+was that it "fits the synthesized distribution and does not transfer to human questions".
+FIX for any future proxy work, cheap and not yet done: hold out the STYLE, not only the questions —
+generate the evaluation proxy with a different prompt or a different model from the one whose output
+trained the component, so that a gain means style-general robustness rather than dialect matching. A
+terse number measured that way would be worth something as evidence about humans; the numbers in P10
+and P11 are worth less than they look, and are recorded here as such.
