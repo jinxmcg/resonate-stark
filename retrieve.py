@@ -293,8 +293,9 @@ def main():
     p.add_argument("--out", default=None)
     p.add_argument("--no-2hop", action="store_true", help="ablation: one-hop operators only (parser v1 coverage)")
     p.add_argument("--beta", type=float, default=0.0, help="weight of the exact-neighbour count (graph-supported constraints)")
-    p.add_argument("--anchor", default=None, help="text-resolve anchors for queries without an exact mention: bge | bgeft | bgeft2 (bgeft2 reuses the text ranker's encoder and data/doc_emb_bgeft2.npy)")
+    p.add_argument("--anchor", default=None, help="text-resolve anchors for queries without an exact mention: bge | bgeft | bgeft2 (bgeft2 reuses the text ranker's encoder and data/doc_emb_bgeft2.npy) | lp (P8 lever A': the latent parser's own anchor head, no separate encoder and no doc matrix)")
     p.add_argument("--anchor-top", type=int, default=2)
+    p.add_argument("--lp-anchor", default="models/lp_p3.pt", help="checkpoint whose anchor head serves --anchor lp")
     p.add_argument("--anchor-weight", type=float, default=0.7)
     p.add_argument("--queries", default=None, help="json {query_id: text} replacing the question text (paraphrase proxy; train/val only)")
     p.add_argument("--llm-parse", default=None, help="data/llmparse_<tag>.json from llm_parse.py: answer type fallback, relation hints, entity names, exclusion")
@@ -324,7 +325,14 @@ def main():
     logdeg_all = torch.from_numpy(np.log1p(np.bincount(d["h"], minlength=len(node_type)) + np.bincount(d["t"], minlength=len(node_type))).astype(np.float32)).to(dev)
     adj = Adjacency(d, int(d["n_rel"]), len(node_type)) if a.beta > 0 else None
     anchor = None
-    if a.anchor:
+    if a.anchor == "lp":                                   # P8 lever A': reuse the parser head already needed for --lparse
+        from latent_parser import LP as LPNET, QPRE as LP_QPRE
+        from transformers import AutoTokenizer
+        cka = torch.load(a.lp_anchor, map_location="cpu", weights_only=False)
+        atok = AutoTokenizer.from_pretrained(cka["encoder"])
+        anet = LPNET(cka["encoder"], model.m, len(tn), 2 * n_rel, cka["kanc"]).to(dev); anet.load_state_dict(cka["state"]); anet.eval()
+        anchor = ("lp", atok, anet, model.table().detach(), LP_QPRE)
+    elif a.anchor:
         from sentence_transformers import SentenceTransformer
         emb = torch.from_numpy(np.load(f"data/doc_emb_{a.anchor}.npy").astype(np.float32)).to(dev)
         st = SentenceTransformer({"bge": "BAAI/bge-base-en-v1.5", "bgeft": "models/bge_ft", "bgeft2": "models/bge_ft2"}[a.anchor], device=str(dev))   # P7: bgeft2 is the text ranker's own encoder — one encoder and one doc matrix instead of two
@@ -384,7 +392,7 @@ def main():
                 mt = tn[int(node_type[i_])]; w = parser.chain_weights(mt, at, q, l_rels)
                 if w: ments.append((i_, names[str(i_)].lower(), mt, w)); n_llm_ent += 1
         n_type += at is not None
-        if anchor is not None and at is not None and not ments and l_ents:      # resolve the LLM's entity names by text, per name
+        if anchor is not None and anchor[0] != "lp" and at is not None and not ments and l_ents:      # resolve the LLM's entity names by text, per name
             emb, st, qpre = anchor
             found = {n_ for _, n_, _, _ in ments}
             for e in l_ents:
@@ -401,9 +409,17 @@ def main():
                 if w and float(sims[i_]) > -1e8:
                     ments.append((i_, names[str(i_)].lower(), mt, w)); n_llm_ent += 1
         if anchor is not None and at is not None and not ments:
-            emb, st, qpre = anchor; n_anc_fb += 1
-            qv = torch.from_numpy(st.encode([qpre + q], convert_to_numpy=True, normalize_embeddings=True)).to(dev)[0]
-            sims = emb @ qv
+            n_anc_fb += 1
+            if anchor[0] == "lp":                          # P8 lever A': the parser's anchor vectors over the entity table, no floor (this IS the fallback)
+                _, atok, anet, E_anc, aqpre = anchor
+                with torch.no_grad():
+                    aenc = atok([aqpre + q], return_tensors="pt", padding=True, truncation=True, max_length=128).to(dev)
+                    _, _, zq = anet(aenc)
+                    sims = (torch.real(zq[0] @ E_anc.conj().t()) * anet.scale.exp()).max(0).values
+            else:
+                emb, st, qpre = anchor
+                qv = torch.from_numpy(st.encode([qpre + q], convert_to_numpy=True, normalize_embeddings=True)).to(dev)[0]
+                sims = emb @ qv
             ok = torch.zeros_like(sims, dtype=torch.bool)
             for mt_name, ti in parser.ktype.items():
                 if parser.ops.get((mt_name, at)) or parser.ops2.get((mt_name, at)):

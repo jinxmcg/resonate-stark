@@ -1136,3 +1136,54 @@ bge_ft2's question vector is a WORSE anchor resolver than un-fine-tuned bge (−
 relational path), because it was fine-tuned to point a question at its answer rather than at the
 entity the question mentions. A shared trunk would inherit that conflict and needs a head that
 keeps generic mention-matching behaviour.
+
+## P8 pre-registration (2026-09-08, before any run) — fewer PARAMETERS: parser-head anchors, rank-reduced document matrix
+Measured parameter inventory of the scored P3 pipeline (not bytes — parameters):
+| lp_p3 encoder + heads 110.2M | bge-base anchor fallback 109.5M | bge_ft2 text ranker 109.5M |
+| p_joint_enc + head 109.7M | doc_emb_bge 99.4M | doc_emb_bgeft2 99.4M |
+| p_k12b4_50k table + operators 37.3M | p_joint table + operators 37.3M | TOTAL 712.1M |
+The four encoders are 62% and the two document matrices 28% — the matrices are nearly two encoders'
+worth of parameters and were invisible in the "three 110M encoders" framing. fp16 / int8 are NOT in
+this plan: they cut bytes, not parameters, and stack on top of whatever count this ends at.
+
+Levers, neither of which retrains anything:
+ A'. The anchor fallback (question-level text resolution, used only when neither string matching nor
+     the latent parser's own anchors produced a mention: 63 / 1,000 plain and 110 / 1,000 terse
+     train questions) is served by the latent parser's anchor head — ALREADY LOADED for --lparse —
+     instead of a separate un-fine-tuned bge-base plus its own document matrix. retrieve.py gains
+     `--anchor lp` (--lp-anchor models/lp_p3.pt): the question's K=3 anchor vectors score every
+     entity through the table, the answer-type-connected types are kept, top-2 at anchor-weight 0.7,
+     exactly the shape of the bge fallback it replaces, and with no floor (this IS the last resort).
+     −109.5M encoder −99.4M document matrix = −208.9M. This is the version of P7's lever A that does
+     not fight its own objective: P7 showed bge_ft2 is a WORSE anchor resolver than stock bge
+     (−0.9 / −0.7) because it was fine-tuned to point a question at its answer rather than at the
+     entity the question mentions; the parser's anchor head is trained for precisely that task.
+ B'. The remaining document matrix is replaced by its rank-d corpus subspace (proj_docs.py, a
+     truncated SVD of the 129,375 x 768 document matrix itself — documents only, no query labels,
+     no split read): a 129,375 x d matrix plus a 768 x d projection. Documents and queries are both
+     projected and ordered by inner product (not renormalised). Fitted energy: d=128 0.9162
+     (16.7M, −83%), d=256 0.9709 (33.3M, −66%), d=384 0.9889 (50.0M, −50%).
+Step 1 — choose d on TRAIN, no val read: the text ranker alone (embed_text2.py --docs/--proj) on the
+train split at d in {128, 256, 384} against the unprojected 768. RULE: the smallest d whose train
+Hit@1 is within 0.3 and Recall@20 within 0.5 of 768. (bge_ft2 was fine-tuned on train, so these
+train numbers are in-sample in absolute terms; the comparison between d and 768 uses the same
+encoder on the same questions, which is what the rule needs.)
+Step 2 — ONE val read, two candidates, scored through predict.py --score:
+   A'      : --anchor lp, unprojected documents, reranker REFIT out of fold on train retrievals
+             (plain + paraphrased, out-of-fold parses) exactly as scripts/lp_pipe_chain.sh does.
+   A' + B' : the same retrievals and the same refit reranker, with the val text ranking taken from
+             the projected matrix at the chosen d.
+   Reference: P3, whose val numbers were reproduced from scratch on this same box under P7 step 2
+   (42.26 / 68.32 / 75.48 / 53.93 plain, 39.71 / 63.94 / 71.80 / 51.09 paraphrased) with these
+   artefacts; not re-run a third time today.
+   DISCLOSED APPROXIMATION: the reranker's train-side text features are precomputed out-of-fold
+   rankings from five fold encoders that were not kept, so B' cannot be propagated into them; the
+   projection is applied at val only. It is a query-time approximation of the same encoder, not a
+   new model, and the bar below carries the risk.
+BAR, fixed before running: a candidate is admissible if its val Hit@1 is not more than 0.5 below P3
+on EITHER wording (the paraphrased set is the binding half — it is where both P7 candidates failed).
+Among the admissible candidates the one with the FEWEST PARAMETERS is adopted. Targets: A' 503.2M,
+A' + B' 437.1M at d=256 (from 712.1M).
+READS: train (step 1, the retrievals and the reranker fit) and val (step 2, the decision). No read of
+test / test-0.1 / human_generated_eval under any outcome. Runs on the rented RTX 5090 (vast.ai
+50261550, torch 2.11.0+cu128) only; the 1080 Ti is not used.
