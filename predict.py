@@ -27,9 +27,11 @@ p.add_argument("--score", action="store_true", help="the one committed read: pri
 p.add_argument("--rerank", default=None, help="data/rerank_<reltag>_<texttag>.json from rerank.py (P2)")
 p.add_argument("--scores-out", default=None, help="write per-query reranker scores of the top-5 (lever B selector features)")
 p.add_argument("--t2l", default=None, help="text-to-latent ranking json for the split (third candidate source, needs a reranker fit with --t2l-tag)")
+p.add_argument("--limit", type=int, default=0, help="score only the first N questions of the split (fail-fast runs on train; same slice as retrieve.py --limit)")
 a = p.parse_args()
 qa = load_qa("prime", human_generated_eval=(a.split == "human_generated_eval"))
 idx = qa.get_idx_split()[a.split].tolist() if a.split != "human_generated_eval" else list(range(len(qa)))
+if a.limit: idx = idx[:a.limit]
 rel = json.load(open(a.rel)); txt = json.load(open(a.text))
 RR = None
 if a.rerank:

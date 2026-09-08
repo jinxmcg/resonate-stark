@@ -1,5 +1,10 @@
 # PLAN_PRIME — STaRK-Prime probe (separate from the OGB work; own numbering)
 
+> **Submission status — 7 September 2026 (confirmed by the user): nothing has
+> been filed for BioKG, WikiKG2, or STaRK-Prime.** Entries are proposed only.
+> Historical references below to “submitted” or “filed” describe intended
+> candidates, not completed filings.
+
 ## P1 pre-registration — the relational half of a semi-structured retrieval benchmark (prime/, jinx 1080 Ti, 2026-09-05)
 
 Question (user): can the same architecture serve as the relational
@@ -880,3 +885,54 @@ pre-registered negative of this line (after the query-time AND and the trained A
 losses on the human set (MS, CAD, CP, HR) remain open; a rule that fixes them will have to come from
 the readout over the candidate's neighbourhood (which candidate has the relation the question asks
 for), not from the question vector alone. SUBMISSION stays P3.
+
+### P6 — reverse-operator candidate feature (2026-09-08, written before any run)
+Idea, from the wikikg2 line (`/mnt/geocore/resonate/wikikg2/REVERSE_MEMBER.md`, RV1, 2026-09-08):
+the table has SEPARATE forward and reverse operators per relation (H is (36, 36, 4, 4) here: 18
+relations x 2 directions), so the opposite operator is a second, independent scorer of the same
+link. For a candidate c that the walk reached from anchor a through hop op, let r_rev = op ^ n_rel
+(the reverse of the LAST hop of the winning chain; a two-hop chain uses its second hop):
+  rev_raw(c) = Re< out(hop(embed(c), r_rev), r_rev), row(a) > * tau
+  rev_nov(c) = rev_raw(c) - logsumexp over the OTHER candidates of the same shortlist as
+               alternative targets (how much c prefers a over other links)
+Over several anchors: max and mean, so four reranker columns (rev_raw_max, rev_raw_mean,
+rev_nov_max, rev_nov_mean). On wikikg2 the pair added +0.017 MRR to an allowed blend, all of it on
+"which entity of this type" questions — the shape of the open STaRK losses (MS / CAD / CP / HR
+name collisions).
+
+Implementation (no retraining, no LLM, nothing else changes): `retrieve.py --rev` records, per
+candidate and per anchor, which hop won that candidate (argmax over the chains already scored) and
+computes the two numbers from the SAME P3 table the pipeline uses (models/p_k12b4_50k.pt); they are
+written into the existing `--dump-feats` block. `rev_check.py` is the self-check: for every one-hop
+question whose shortlist contains the true answer, rev_raw at that answer is recomputed the long
+way — the model's own readout of the reverse-operator query over the whole table, read at the
+anchor row — and must agree to ~1e-5 (max absolute difference); for the candidates the walk reached
+through the reverse operator the opposite operator is the FORWARD one, so the recomputed number is
+literally the table's forward score of the triple (candidate, r, anchor), as in
+`wikikg2/reverse_wiki.py`. The check is reported whatever it says; a failure stops the step.
+
+Fail-fast protocol (the P5 protocol, fixed here before running):
+* Questions: the first 1,000 of `train`, plain wording and the terse paraphrases
+  (`data/para_train_terse.json`). Relational path only: `--anchor bge --beta 30 --lparse`, with the
+  lp_p3 parses already produced for P5 (`data/lparse_train_full.json`, `data/lparse_train_terse.json`).
+* Reranker: `rev_oof.py`. Groups are the relational top-100 of each question. Features, arm "base":
+  z, exact, exact/nm, rel_rrf, logdeg (the relational subset of the P3 reranker's set); arm "rev":
+  base + the four columns above. Model: the P3 reranker's listwise logistic regression
+  (`rerank.fit`, steps 400, lr 0.05, L2 1e-3, Adam, features standardised on the fitting folds),
+  ONE global weight vector (1,000 questions is too few for per-type fits). Out of fold: fold =
+  position in the slice % 5; each fold is scored by the model fit on the other four, fit on the
+  plain AND terse groups together (the P3 reranker is likewise fit on plain + paraphrased train).
+  No question is ever scored by a model fit on it. Both arms use the same folds, the same
+  shortlists and the same optimiser settings; only the feature columns differ.
+* Metrics: `predict.py --score` on the same 1,000 train questions (`--limit 1000`, added for this),
+  i.e. the official scoring path; questions with no relational output count as misses.
+  Hit@1 / Hit@5 / Recall@20 / MRR, plus the no-reranker rows for reference.
+BAR, fixed before running: plain train Hit@1 with the features at least +1.0 over without, AND
+terse train Hit@1 not below the without-rev number. If met: the same comparison on `val`, under a
+SEPARATE registration written before that run. If not met: record the negative and stop.
+READS: `train` only (question text, and answers inside `predict.py --score`). No read of `test`,
+`test-0.1` or `human_generated_eval` under any outcome of this step.
+Deviation disclosed: run on a rented RTX 5090 (vast.ai instance 50261550) with the box's torch
+2.11.0+cu128, because sm_120 has no torch 2.6.0 kernels; jinx stays pinned at 2.6.0 and the
+val step, if it happens, can be reproduced there. Everything else — checkpoint, parses, splits,
+scoring path — is the P3 pipeline's.

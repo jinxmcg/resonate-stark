@@ -200,7 +200,36 @@ class Adjacency:
 
 
 @torch.no_grad()
-def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, adj=None, beta=0.0, feats=False, no_model=False, logdeg=None, agg="sum", agg_p=1.0):
+def rev_feats(model, n_rel, E, tk, rev_track, dev):
+    """P6: the OPPOSITE operator's score of the same link, per shortlist candidate.
+
+    The table has separate forward and reverse operators per relation, so for an anchor a and a
+    candidate c the reverse of the hop the walk used to reach c is a second, independent scorer of
+    the same link. r_rev = op ^ n_rel of the LAST hop of the chain that won c from a;
+      rev_raw(c) = Re<out(hop(embed(c), r_rev), r_rev), row(a)> * tau
+      rev_nov(c) = rev_raw(c) - logsumexp of the same score over the OTHER shortlist candidates as
+                   alternative targets (how much c prefers a over other links).
+    Max and mean over the anchors; rev_anchor / rev_op record which anchor and operator gave the
+    max, for rev_check.py. (wikikg2/REVERSE_MEMBER.md)"""
+    K = len(tk)
+    if not rev_track:
+        return {k: [0.0] * K for k in ("rev_raw_max", "rev_raw_mean", "rev_nov_max", "rev_nov_mean")} | {"rev_anchor": [-1] * K, "rev_op": [-1] * K}
+    tau = model.log_tau.exp(); ar = torch.arange(K, device=dev)
+    raws, novs, ops = [], [], []
+    for (i, best_op) in rev_track:
+        op_rev = (best_op[tk] + n_rel) % (2 * n_rel)
+        zc = model.out(model.hop(model.embed(tk), op_rev), op_rev)                                  # (K, M)
+        S = torch.real(zc @ E[torch.cat([torch.tensor([i], device=dev), tk])].conj().t()) * tau     # (K, 1 + K): anchor, then the shortlist
+        S[ar, ar + 1] = -1e9                                                                        # a candidate is not its own alternative target
+        raws.append(S[:, 0]); novs.append(S[:, 0] - torch.logsumexp(S, 1)); ops.append(op_rev)
+    R = torch.stack(raws); V = torch.stack(novs); O = torch.stack(ops); b = R.argmax(0)
+    return {"rev_raw_max": R.max(0).values.tolist(), "rev_raw_mean": R.mean(0).tolist(),
+            "rev_nov_max": V.max(0).values.tolist(), "rev_nov_mean": V.mean(0).tolist(),
+            "rev_anchor": [int(rev_track[j][0]) for j in b.tolist()], "rev_op": O[b, ar].tolist()}
+
+
+@torch.no_grad()
+def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, adj=None, beta=0.0, feats=False, no_model=False, logdeg=None, agg="sum", agg_p=1.0, rev=False):
     at_idx, ments = parsed
     if at is None or not ments:
         return ([], None) if feats else []
@@ -211,8 +240,9 @@ def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, a
     total = torch.zeros(E.shape[0], device=dev)
     exact = torch.zeros(E.shape[0], device=dev)
     per_name = {}                                         # best chain score per NAME: OR over a name's resolutions and chains, AND across names
+    rev_track = []                                        # P6: (anchor id, per-candidate last hop of the winning chain)
     for (i, n, mt, w) in ments:
-        best = None
+        best = None; best_op = None
         if adj is not None and beta > 0:
             hit = np.zeros(E.shape[0], dtype=bool)
             for chain, wt in w.items():
@@ -229,9 +259,13 @@ def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, a
             sm = s[mask]
             zs = (s - sm.mean()) / (sm.std() + 1e-6)
             zs = zs * wt
+            if rev:                                       # which hop reached each candidate from this anchor
+                op_last = int(op[0])
+                best_op = torch.full_like(zs, op_last, dtype=torch.long) if best is None else torch.where(zs > best, op_last, best_op)
             best = zs if best is None else torch.maximum(best, zs)
         total += best
         if best is not None: per_name[n] = best if n not in per_name else torch.maximum(per_name[n], best)
+        if rev and best is not None: rev_track.append((i, best_op))
     if agg != "sum" and len(per_name) >= 2:              # AND over names of (OR over resolutions and chains): one stacked tensor, one reduction
         S = torch.stack(list(per_name.values()))          # (k_names, N)
         if agg == "min": total = S.min(0).values
@@ -246,7 +280,9 @@ def score_query(model, n_rel, parsed, at, type_mask, dev, k=100, exclude=None, a
     tk = torch.topk(total, k).indices
     top = tk.tolist()
     if feats:   # per-candidate parts of the score, for a reranker fit on train: z-score sum and exact-support count
-        return top, {"z": (total[tk] - beta * exact[tk]).tolist(), "exact": exact[tk].tolist()}
+        f = {"z": (total[tk] - beta * exact[tk]).tolist(), "exact": exact[tk].tolist()}
+        if rev: f.update(rev_feats(model, n_rel, E, tk, rev_track, dev))
+        return top, f
     return top
 
 
@@ -272,6 +308,7 @@ def main():
     p.add_argument("--no-model", action="store_true", help="ablation: drop the ResonatE score entirely; rank by exact-support count only (ties by node degree)")
     p.add_argument("--llm-override-type", action="store_true", help="let the LLM answer type override the pattern one (default: fallback only)")
     p.add_argument("--dump-feats", action="store_true", help="also store per-candidate z-sum and exact count (reranker features)")
+    p.add_argument("--rev", action="store_true", help="P6: also store the reverse-operator features rev_raw / rev_nov per candidate (needs --dump-feats)")
     a = p.parse_args()
     predict_only = a.split in ("test", "test-0.1", "human_generated_eval")   # committed read: rankings only, no metrics here
     dev = torch.device(a.device)
@@ -387,7 +424,7 @@ def main():
         if neg is None and lp.get("exclude_relation") in rel_ids:
             neg = rel_ids[lp["exclude_relation"]]
         excl = torch.from_numpy(deg[neg] > 0).to(dev) if neg is not None else None
-        top = score_query(model, n_rel, (at, ments), at, type_mask, dev, exclude=excl, adj=adj, beta=a.beta, feats=a.dump_feats, no_model=a.no_model, logdeg=logdeg_all, agg=a.agg, agg_p=a.agg_p)
+        top = score_query(model, n_rel, (at, ments), at, type_mask, dev, exclude=excl, adj=adj, beta=a.beta, feats=a.dump_feats, no_model=a.no_model, logdeg=logdeg_all, agg=a.agg, agg_p=a.agg_p, rev=a.rev)
         fe = None
         if a.dump_feats:
             top, fe = top
