@@ -1300,3 +1300,39 @@ of fold, and take ONE val read against P8's 42.44 / 39.49 under the same 0.5 Hit
 READS: `train` only in step 1 (fold 0 is held out from the model that is screened on it). No read of
 test / test-0.1 / human_generated_eval. Runs on the rented RTX 5090 (vast.ai 50261550) only — this
 is the first step in this line that is actually GPU-bound.
+
+### P9 STEP 1 RESULT (2026-09-08 14:06-14:12 UTC, vast.ai 50261550, RTX 5090; scripts/p9_screen.sh): SCREEN FAILS on the text head; the text-to-latent comparison is VOID
+The shared trunk trained in 2m27s on the 9,858 rows outside fold 0 (3 epochs, all five losses
+falling together), anchor floor 15.612 at F1 0.834 against the weak labels, 110.4M parameters saved
+as models/st_f0.pt — against the 329.4M of the three encoders it would replace.
+Fold 0 of train (n=1,233 questions), shared head vs the DEDICATED model that excluded the same fold:
+| head            | shared                        | dedicated (fold 0 excluded)   | Hit@1 |
+| text ranker     | 20.19 / 41.52 / 44.58 / 29.68 | 22.30 / 41.77 / 46.61 / 31.42 | **−2.11** |
+| text-to-latent  | 44.93 / 70.80 / 69.37 / 56.74 | 26.52 / 39.25 / 36.42 / 32.38 | +18.41 — VOID, see below |
+| parser (relational path, --anchor bge, both parses) | 26.85 / 42.17 / 51.63 / 34.39 | 26.36 / 42.17 / 51.03 / 34.05 | +0.49 |
+BAR (no head more than 2.0 Hit@1 below its dedicated counterpart): the TEXT head is 2.11 below.
+FAILS, by 0.11. P9 stops here under its own pre-registration; step 2 is not run.
+
+The text-to-latent row is not evidence and must not be quoted as a gain. The shared trunk scores its
+t2l head against the FULL models/p_joint.pt table, which joint_train.py fit on every train question
+INCLUDING fold 0, while data/oof/p_joint_f0.json came from a run that retrained the table without
+fold 0 (joint_train.py --fold 5:0; those runs return before saving, so models/p_joint.pt itself is
+the clean full-train model — the deployed pipeline is unaffected). The shared arm was therefore
+scoring held-out questions with a table that had been trained on their answers. This is the same
+in-sample trap recorded two hours earlier for P7 step 1, entered from a different direction: there
+the table was the lever, here the table is the fixed scorer and the FOLD MATCH was missed. Written
+down again, in the general form: in this pipeline every fold-held-out comparison must fold-match the
+ENTITY TABLE as well as the encoder, because the table is trained on train questions too.
+The parser row IS fair: both arms score against the same full table (latent_parser.py's fold runs
+use models/p_joint.pt as well), so the contamination is identical on both sides and cancels; the
+absolute numbers are optimistic but the +0.49 comparison stands.
+
+What the screen does establish, which is the interesting half: the conflict predicted from P7 lever A
+and P8 is real and it has a direction. Sharing one trunk HELPS the parser head (+0.49 — the anchor
+task is the one that wants a mention-pointing vector, and three of the five losses pull that way) and
+HURTS the text ranker (−2.11 — the task that wants an answer-pointing vector). The trunk is being
+pulled toward the mention objective, and the text task pays for it. A corrected P9 would have to
+(a) rebalance the loss weights toward the text task, or give it its own adapter over the shared
+trunk, and (b) redo the t2l screen against a fold-0-excluded table (joint_train.py --fold 5:0, ~5
+minutes, no checkpoint of it was kept). Both change a pre-registered design and need a new
+registration; neither is run here. P8's 453.8M stands as the smallest measured pipeline.
