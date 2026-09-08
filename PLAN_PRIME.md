@@ -1858,3 +1858,113 @@ P14 is shorthand robustness, so the shorthand half is what must gain; a model th
 everywhere has not earned a swap. If it fails, the recorded conclusion is that stock retention was a
 floor effect and domain pretraining does not survive fine-tuning on this corpus.
 READS: train (fitting) and val (the decision). No test or human read. Box: vast.ai 50270859.
+
+### P16 RESULT (2026-09-08 17:41-18:14 and 19:21-19:35 UTC, vast.ai 50270859; scripts/p16.sh + scripts/p16_resume.sh): BAR PASSED — the parser learns a REGISTER once training supplies more than one dialect
+
+Two-dialect parser (plain + natural + Qwen-terse + OpenBioLLM-terse, 24,648 rows,
+6,162 questions), three seeds, P11's recipe otherwise untouched. Judge: terse B
+(Phi), the register NEITHER generator produced. Val only; no test or human read.
+
+| register | P16 (3 seeds) | P3 | advantage | P16 seed sd | P11's advantage |
+|---|---|---|---|---|---|
+| plain | 42.42 | 42.79 | −0.37 | 0.03 | — |
+| terse A (Qwen, trained on) | 34.63 | 33.97 | +0.66 | 0.38 | +0.54 |
+| **terse B (Phi, UNSEEN — the judge)** | **33.73** | 33.02 | **+0.71** | 0.43 | +0.19 |
+| terse C (OpenBioLLM, trained on) | 36.49 | 35.72 | +0.77 | 0.13 | +0.30 |
+
+BAR (fixed before the run): the advantage on terse B must exceed P11's +0.19 by
+at least the pooled across-seed spread, 0.13 — i.e. > 0.32. Measured **+0.71**.
+**PASSED**, at 3.8x P11's advantage on the same unseen register.
+
+**Reading.** P11's single-dialect parser showed the signature of partial
+dialect-fitting: +0.54 on the dialect it trained on, +0.19 on the one it never
+saw. Training on two generators removes that ordering entirely — +0.66 / +0.71 /
++0.77, with the UNSEEN register no longer the weakest. Averaged over the three
+shorthand registers the advantage goes from P11's +0.34 to +0.71, and it is the
+generalisation half that improves. So the parser can learn a register rather than
+a dialect, but only when the training data contains more than one dialect; with
+one, it partly memorises that generator's habits. The practical rule for this
+kind of augmentation is to use several generators, and P12's open caveat is
+answered in the affirmative.
+
+**CAVEAT, stated because the bar understates it.** P16's own across-seed spread
+on terse B is 0.43, more than three times the 0.13 the bar assumed from P13's
+variances. The +0.71 advantage is therefore about 1.6 of P16's own seed sigma,
+not the ~5 sigma the bar's arithmetic implied. The direction is consistent — all
+three seeds and all three registers point the same way — but this is a weaker
+result than +0.71 alone reads, and it should be quoted with the spread beside it.
+The plain cost (−0.37) is real and matches P11's pattern of buying shorthand
+with plain.
+
+**Consequence for the line.** P11's shorthand numbers were an upper bound, as
+P13's amendment suspected; the two-dialect parser is the version that should
+carry forward. It does not change what is submitted (P3 remains the candidate,
+already read on test), and it does not itself justify a test read.
+
+Run note: the credit outage killed the original run mid-terseA; scripts/p16_resume.sh
+re-ran only the (register, seed) pairs that were missing, regenerating nothing.
+The first resume attempt failed silently — `uv run --active` has no VIRTUAL_ENV
+over ssh, so every step died with ModuleNotFoundError while the status markers
+still printed "done"; it was caught because four registers "completed" in three
+seconds. Repointed at /venv/main and verified on one step before relaunching.
+
+### P15 FULL BUILD RESULT (2026-09-08 19:40-21:09 UTC, vast.ai 50270859; scripts/p15_full.sh + scripts/p15_resume_cd.sh): BOTH BARS FAIL — one encoder costs the fusion its diversity
+
+The 3x parameter cut is real and was built exactly as registered: five out-of-fold
+trunks plus a full-train trunk at text-loss 3x (110.4M each), the corpus re-embedded
+through the full trunk, the rank-384 projection refit on it (98.67% energy kept,
+99.4M -> 50.0M), `retrieve.py --anchor st` so the trunk is the ONLY encoder, and
+the reranker refit out of fold. 712.1M -> ~235M, confirmed component by component.
+
+| register | P15 full (~235M) | P3 (712.1M) | gap |
+|---|---|---|---|
+| plain | 36.10 | 42.79 | −6.69 |
+| terse A | 29.00 | 33.97 | −4.97 |
+| terse B | 29.27 | 33.02 | −3.75 |
+| terse C | 31.37 | 35.72 | −4.35 |
+
+BAR 1: plain >= 41.79. Measured **36.10**, 5.69 below. **FAILS.**
+BAR 2: shorthand mean >= 33.24. Measured **29.88**, 3.36 below. **FAILS.**
+
+**Why, and it is not what the screen could have found.** Every head is within about
+a point of its dedicated counterpart, exactly as the screen said:
+
+| head, val plain | shared trunk | dedicated | delta |
+|---|---|---|---|
+| text | 21.95 | 22.30 | −0.35 |
+| text-to-latent | 25.57 | 26.52 | −0.95 |
+| parser / relational | 25.48 | 26.36 | −0.88 |
+| **fused + reranked** | **36.10** | **42.79** | **−6.69** |
+
+Three heads each ~1 point down give a pipeline 6.7 points down. The loss is not in
+the heads, it is in the FUSION: reciprocal-rank fusion and the listwise reranker
+extract their value from three rankers that make *uncorrelated* errors, and once a
+single 110.4M trunk produces all three, the errors correlate and there is far less
+diversity left to combine. P9's screen and P15's screen both measured heads in
+isolation against dedicated counterparts, which is precisely the measurement that
+cannot see inter-head correlation. The screens were not wrong; they were blind to
+the quantity that decides the outcome.
+
+The t2l row is also now judged cleanly, which the screen said the full build would
+do: the contaminated screen value was 44.93 (P9) / 45.17 (P15), and the honest val
+number is **25.57** against a dedicated 26.52. So the trunk's t2l head is fine — it
+was the 45 that was fantasy, and nothing about the shared trunk's t2l is a
+regression. This closes the "voided t2l comparison" that has been open since P9.
+
+**CONSEQUENCE, per the pre-registration: Prime submits P3 at 712.1M.** The shared
+trunk is recorded as a negative result and the -218.7M / -477M parameter route is
+closed for this pipeline. A 3x cut costing 6.7 Hit@1 is not a trade this line takes.
+The general lesson for the paper: in a fused pipeline, parameter sharing must be
+screened on the FUSED output, never head by head — the heads can each be fine while
+the ensemble they feed is not.
+
+**Run notes.** `p15_full.sh` had two defects that made the first pass report
+`P15FULL_DONE` while scoring nothing: it never wrote `data/fusion_st.json` (the RRF
+weight `rerank.py` reads), and it wrote the val t2l rankings as
+`t2l_val_st_<register>.json` while `rerank.py` reads `data/text_val_<t2l_tag>.json`.
+Both were fatal, and both were swallowed by `predict.py ... 2>&1 | grep COMMITTED`.
+Caught because step D took 106 seconds instead of ten minutes. Fixed by supplying
+w=0.45 (the value `fusion_bgeft2.json` holds and the value step D already passes as
+`--w`, so "same hyperparameters" as registered) and by copying the val t2l file to
+the name rerank expects, verified as the same artefact by role and byte size against
+its `pjoint` counterpart. Steps A-C's expensive outputs were unaffected and reused.
