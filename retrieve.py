@@ -87,6 +87,20 @@ class Parser:
             for a_, ids in aliases.get("symbols", {}).items():
                 if a_ not in self.by_name and a_ not in self.by_symbol: self.alias_symbols[a_] = list(ids)
         self.names_sorted = sorted(self.by_name, key=len, reverse=True)
+        # substring index over the names: mentions() used to test all ~129k names per question with
+        # `n in ql`, one Python operation each, and that dominated retrieval wall time. The automaton
+        # returns exactly the names that `n in ql` would accept; they are then walked in the SAME
+        # order (names_sorted) through the same boundary regex, so the output is unchanged.
+        self.name_rank = {n: i for i, n in enumerate(self.names_sorted)}
+        self.aut = None
+        try:
+            import ahocorasick
+            A = ahocorasick.Automaton()
+            for n in self.names_sorted:
+                if len(n) >= min_len: A.add_word(n, n)
+            A.make_automaton(); self.aut = A
+        except Exception:
+            self.aut = None                                   # falls back to the scan; same results, slower
         # (mention type, answer type) -> set of (rel, direction)   direction 0: mention --r--> answer
         self.ops = collections.defaultdict(set)
         for r, a, b, c in sigs:                       # signatures carry type ids; parse() uses names
@@ -125,7 +139,10 @@ class Parser:
                 found.append((n, self.by_symbol[n])); used.append((m.start() + 1, m.end() + 1))
             elif n in self.alias_symbols:
                 found.append((n, self.alias_symbols[n])); used.append((m.start() + 1, m.end() + 1))
-        for n in self.names_sorted:
+        pool = self.names_sorted
+        if self.aut is not None:
+            pool = sorted({v for _, v in self.aut.iter(ql)}, key=self.name_rank.__getitem__)
+        for n in pool:
             if len(n) < 4 or n not in ql:
                 continue
             for m in re.finditer(r"(?<![a-z0-9])" + re.escape(n) + r"(?![a-z0-9])", ql):

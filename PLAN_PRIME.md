@@ -1231,3 +1231,24 @@ Remaining ladder from 453.8M: one trunk with three heads (−218.7M, needs train
 anchor head so it does not re-create P7 lever A's conflict), distillation to a small trunk (−76M),
 and the entity tables (74.6M, of which lever C's second table is −37.3M and missed P7's bar by 0.08).
 fp16 / int8 remain available as a byte-level 2-4x on top of whatever the parameter count ends at.
+
+### Pipeline speed (2026-09-08, engineering only — no experiment, both changes verified equivalent)
+Observed while P8 ran: the retrieval process sits at 101% CPU on a 12-core box with the GPU at
+10-15% and 1.2 GB used. The pipeline is CPU-bound and single-threaded, not GPU-bound; the rented
+5090 was buying almost nothing for these runs (it will matter for P9, which trains).
+Two hot spots, both fixed here, each verified to leave results unchanged:
+ 1. `Parser.mentions` tested all ~129,000 node names per question with `n in ql` — one Python
+    operation each. It now uses an Aho-Corasick automaton over the same names (pyahocorasick,
+    built once per Parser; falls back to the old scan if the module is missing). The automaton
+    accepts exactly the names `n in ql` accepts, and they are walked in the SAME names_sorted order
+    through the same boundary regex. VERIFIED: rerunning P7 arm 0's command over 1,000 train
+    questions gives a byte-identical rel json — 0 of 1,000 questions differ. Full train split
+    (6,162 questions, out-of-fold parses): 115 s -> 62 s.
+ 2. `rerank.fit` looped over ~12,000 groups in Python per optimiser step — 4.8M tiny kernel launches
+    per fit, which is why an 11-feature logistic regression took ~7 minutes. It now pads the groups
+    into one (G, Cmax, F) tensor with a mask and runs the identical loss as a single batched step.
+    The old loop is kept behind `--slow-fit`. VERIFIED (fit_equiv.py, 1,500 groups, same data):
+    max |weight difference| 7.15e-07 (relative 4.36e-07), 29.7 s -> 0.2 s (168x).
+Also adopted for future scripts: independent retrievals run in parallel (12 cores, single-threaded
+jobs) instead of serially. A full chain (2 train + 2 val retrievals, refit, 4 scored predicts)
+should fall from ~25 minutes to ~5, which is what makes multi-arm val reads affordable.

@@ -51,17 +51,36 @@ def build(rel, txt, w, logdeg, qids, t2l=None):
     return out
 
 
-def fit(groups, dev, steps=400, lr=0.05, l2=1e-3, init=None):
-    X = [torch.from_numpy(x).to(dev) for x, y in groups]; Y = [torch.from_numpy(y).to(dev) for x, y in groups]
-    M = X[0].shape[1]
+def fit(groups, dev, steps=400, lr=0.05, l2=1e-3, init=None, slow=False):
+    """Listwise logistic regression: softmax over each query's candidates, cross-entropy on its
+    answers, L2. `slow` keeps the original per-group Python loop; the default pads the groups into
+    one (G, Cmax, F) tensor with a mask and runs the same loss as a single batched step — identical
+    mathematics (verified to 1e-5 on the weights by scripts/fit_equiv.py), ~100x fewer kernels."""
+    if slow:
+        X = [torch.from_numpy(x).to(dev) for x, y in groups]; Y = [torch.from_numpy(y).to(dev) for x, y in groups]
+        M = X[0].shape[1]
+        w = torch.zeros(M, device=dev) if init is None else torch.tensor(init, device=dev, dtype=torch.float32).clone()
+        w.requires_grad_(True); opt = torch.optim.Adam([w], lr=lr)
+        for _ in range(steps):
+            opt.zero_grad(); loss = 0.0
+            for x, y in zip(X, Y):
+                ls = torch.log_softmax(x @ w, 0)
+                loss = loss - (ls * y).sum() / y.sum()
+            loss = loss / len(X) + l2 * (w * w).sum(); loss.backward(); opt.step()
+        return w.detach().cpu().numpy()
+    G = len(groups); M = groups[0][0].shape[1]; C = max(len(y) for _, y in groups)
+    Xp = np.zeros((G, C, M), np.float32); Yp = np.zeros((G, C), np.float32); Ms = np.zeros((G, C), bool)
+    for g, (x, y) in enumerate(groups):
+        n = len(y); Xp[g, :n] = x; Yp[g, :n] = y; Ms[g, :n] = True
+    X = torch.from_numpy(Xp).to(dev); Y = torch.from_numpy(Yp).to(dev); Mk = torch.from_numpy(Ms).to(dev)
+    ny = Y.sum(1)
     w = torch.zeros(M, device=dev) if init is None else torch.tensor(init, device=dev, dtype=torch.float32).clone()
     w.requires_grad_(True); opt = torch.optim.Adam([w], lr=lr)
     for _ in range(steps):
-        opt.zero_grad(); loss = 0.0
-        for x, y in zip(X, Y):
-            ls = torch.log_softmax(x @ w, 0)
-            loss = loss - (ls * y).sum() / y.sum()
-        loss = loss / len(X) + l2 * (w * w).sum(); loss.backward(); opt.step()
+        opt.zero_grad()
+        ls = torch.log_softmax((X @ w).masked_fill(~Mk, -float("inf")), 1)
+        loss = -((ls * Y).sum(1) / ny).mean() + l2 * (w * w).sum()
+        loss.backward(); opt.step()
     return w.detach().cpu().numpy()
 
 
@@ -70,6 +89,7 @@ def main():
     p.add_argument("--device", default="cuda"); p.add_argument("--min-group", type=int, default=100); p.add_argument("--l2", type=float, default=1e-3)
     p.add_argument("--drop", default="", help="ablation: comma-separated feature names to zero out (z,exact,exact/nm,rel_rrf,in_rel,txt_rrf,in_txt,logdeg,fused)")
     p.add_argument("--no-save", action="store_true")
+    p.add_argument("--slow-fit", action="store_true", help="the original per-group fit loop (reproduces earlier runs exactly)")
     p.add_argument("--aug-rel-tag", default=None, help="extra train groups from paraphrased train: data/rel_train_<tag>.json")
     p.add_argument("--aug-text-tag", default=None, help="... and data/text_train_<tag>.json")
     p.add_argument("--t2l-tag", default=None, help="third ranking: data/text_{train,val}_<tag>.json (text-to-latent)")
@@ -109,12 +129,12 @@ def main():
         if y.sum() == 0: continue
         gtr.append((rel["train"][str(qid)]["answer_type"], (f - mu) / sd, y))
     print(f"train groups with a reachable answer: {len(gtr)} / {sum(v is not None for v in B['train'].values())} covered")
-    w_g = fit([(x, y) for _, x, y in gtr], dev, l2=a.l2)
+    w_g = fit([(x, y) for _, x, y in gtr], dev, l2=a.l2, slow=a.slow_fit)
     print("global weights:", {n: round(float(x), 3) for n, x in zip(names, w_g)})
     w_t = {}
     for t in sorted(set(at for at, _, _ in gtr)):
         sub = [(x, y) for at, x, y in gtr if at == t]
-        w_t[t] = fit(sub, dev, steps=200, l2=a.l2, init=w_g) if len(sub) >= a.min_group else w_g
+        w_t[t] = fit(sub, dev, steps=200, l2=a.l2, init=w_g, slow=a.slow_fit) if len(sub) >= a.min_group else w_g
     for tag, use_type in (("global", False), ("per-type", True)):
         rows_base, rows_rr = [], []
         for qid, (ans, i) in info["val"].items():
