@@ -1796,3 +1796,47 @@ encoders collapse to one 110.4M trunk, taking the pipeline from 453.8M to roughl
 build — five out-of-fold trunks plus a full-train trunk, the corpus re-embedded through it, the
 rank-384 projection refit, every ranking regenerated, the reranker refit out of fold, and ONE val
 read — is a separate registration and is not run here.
+
+## P15 FULL BUILD pre-registration (2026-09-08, before the run) — the shared trunk end to end, one val read
+P15's screen passed at text-loss 3x (text head −0.97, parser head +0.65, both inside the 2.0 bar), so
+the trunk is built for real. Everything below is fixed now.
+Build: six trainings of shared_trunk.py --w-text 3 — one per out-of-fold split (5:0 … 5:4) and one on
+all of train (models/st_full.pt). Each fold trunk writes its own fold's train rankings for TEXT and
+TEXT-TO-LATENT and its own fold's PARSES, plain and paraphrased, so every reranker feature stays out
+of fold exactly as lp_p3's chain built them; the fold trunks embed the corpus themselves, because a
+fold model's text ranking must not be scored against documents embedded by a model that saw the fold.
+The full trunk embeds the corpus once for val, the rank-384 projection of P8 is REFIT on that new
+document matrix (proj_docs.py, the corpus only, no labels), and val rankings are produced for plain,
+natural paraphrase and the three shorthand registers.
+retrieve.py gains --anchor st: the shared trunk's own anchor head serves the fallback, so the trunk is
+the ONLY encoder in the pipeline — parse, anchors, text ranking and text-to-latent. Anything less
+would re-add an encoder and forfeit the point.
+Reranker: refit out of fold on the new features, same group structure and same hyperparameters.
+Scored through predict.py --score, ONE val read, against P3's three-seed means (plain 42.79, terse A
+33.97, terse B 33.02, terse C 35.72) and P8's 42.44 plain.
+Parameters if it lands: one 110.4M trunk + a rank-384 document matrix (50.0M) + two entity tables
+(74.6M) ≈ 235M, against P3's 712.1M and P8's 453.8M.
+BAR, fixed before running: plain val Hit@1 no more than 1.0 below P3's three-seed mean of 42.79, AND
+the mean over the three shorthand registers no more than 1.0 below P3's 34.24. A 3x parameter cut is
+worth a point; it is not worth more, and the shorthand half binds as it has all day.
+READS: train (all fitting) and val (the decision). No test, test-0.1 or human read. Box 50261550.
+
+## P16 pre-registration (2026-09-08, before any run) — does the parser learn a REGISTER or a DIALECT?
+P11's advantage over P3 is largest on the shorthand dialect it trained on and smallest on the one it
+never saw: terse A (Qwen, its training dialect) +0.54, terse C (OpenBioLLM) +0.30, terse B (Phi,
+unseen) +0.19. That ordering is what partial dialect-fitting looks like, and it is the open question
+from the P12 caveat: is the parser learning shorthand, or Qwen's shorthand?
+Design (the user's proposal, sharpened): generate a SECOND training dialect —
+data/para_train_terse_c.json, the 6,162 train questions compressed by aaditya/Llama3-OpenBioLLM-8B
+under the same terse2 prompt — and train the parser on BOTH dialects. Labels are per question, so
+each question contributes three rows (plain, natural, Qwen-terse) plus a fourth (OpenBioLLM-terse):
+24,648 rows. Three seeds, P11's recipe otherwise untouched, the P11 reranker and fold parsers held
+fixed exactly as P13 held them.
+The judge is the register NEITHER generator produced: terse B (Phi).
+BAR, fixed before running: the two-dialect parser's advantage over P3 on terse B must exceed P11's
++0.19 by at least the pooled across-seed spread (0.13 at P13's measured seed variances). If it does,
+dialect diversity in training generalises to unseen shorthand and the finding is that this kind of
+augmentation should always use several generators. If it does not, the parser is learning a dialect
+rather than a register, and every shorthand number in this line — P11's included — should be read as
+an upper bound.
+READS: train (generation and fitting) and val (the decision). No test or human read. Box 50270859.

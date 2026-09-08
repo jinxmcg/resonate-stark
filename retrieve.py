@@ -314,6 +314,7 @@ def main():
     p.add_argument("--anchor", default=None, help="text-resolve anchors for queries without an exact mention: bge | bgeft | bgeft2 (bgeft2 reuses the text ranker's encoder and data/doc_emb_bgeft2.npy) | lp (P8 lever A': the latent parser's own anchor head, no separate encoder and no doc matrix)")
     p.add_argument("--anchor-top", type=int, default=2)
     p.add_argument("--lp-anchor", default="models/lp_p3.pt", help="checkpoint whose anchor head serves --anchor lp")
+    p.add_argument("--st-anchor", default="models/st_full.pt", help="shared-trunk checkpoint whose anchor head serves --anchor st")
     p.add_argument("--anchor-weight", type=float, default=0.7)
     p.add_argument("--queries", default=None, help="json {query_id: text} replacing the question text (paraphrase proxy; train/val only)")
     p.add_argument("--llm-parse", default=None, help="data/llmparse_<tag>.json from llm_parse.py: answer type fallback, relation hints, entity names, exclusion")
@@ -343,7 +344,14 @@ def main():
     logdeg_all = torch.from_numpy(np.log1p(np.bincount(d["h"], minlength=len(node_type)) + np.bincount(d["t"], minlength=len(node_type))).astype(np.float32)).to(dev)
     adj = Adjacency(d, int(d["n_rel"]), len(node_type)) if a.beta > 0 else None
     anchor = None
-    if a.anchor == "lp":                                   # P8 lever A': reuse the parser head already needed for --lparse
+    if a.anchor == "st":                                   # P15: the shared trunk's own anchor head — one encoder for parse, text and anchors
+        from shared_trunk import Shared, QPRE as ST_QPRE
+        from transformers import AutoTokenizer
+        cks = torch.load(a.st_anchor, map_location="cpu", weights_only=False)
+        atok = AutoTokenizer.from_pretrained(cks["encoder"])
+        anet = Shared(cks["encoder"], model.m, len(tn), 2 * n_rel, cks["kanc"]).to(dev); anet.load_state_dict(cks["state"]); anet.eval()
+        anchor = ("st", atok, anet, model.table().detach(), ST_QPRE)
+    elif a.anchor == "lp":                                   # P8 lever A': reuse the parser head already needed for --lparse
         from latent_parser import LP as LPNET, QPRE as LP_QPRE
         from transformers import AutoTokenizer
         cka = torch.load(a.lp_anchor, map_location="cpu", weights_only=False)
@@ -412,7 +420,7 @@ def main():
                 mt = tn[int(node_type[i_])]; w = parser.chain_weights(mt, at, q, l_rels)
                 if w: ments.append((i_, names[str(i_)].lower(), mt, w)); n_llm_ent += 1
         n_type += at is not None
-        if anchor is not None and anchor[0] != "lp" and at is not None and not ments and l_ents:      # resolve the LLM's entity names by text, per name
+        if anchor is not None and anchor[0] not in ("lp", "st") and at is not None and not ments and l_ents:      # resolve the LLM's entity names by text, per name
             emb, st, qpre = anchor
             found = {n_ for _, n_, _, _ in ments}
             for e in l_ents:
@@ -430,11 +438,11 @@ def main():
                     ments.append((i_, names[str(i_)].lower(), mt, w)); n_llm_ent += 1
         if anchor is not None and at is not None and not ments:
             n_anc_fb += 1
-            if anchor[0] == "lp":                          # P8 lever A': the parser's anchor vectors over the entity table, no floor (this IS the fallback)
-                _, atok, anet, E_anc, aqpre = anchor
+            if anchor[0] in ("lp", "st"):                  # P8 lever A' / P15: an anchor head already in memory, no floor (this IS the fallback)
+                kind, atok, anet, E_anc, aqpre = anchor
                 with torch.no_grad():
                     aenc = atok([aqpre + q], return_tensors="pt", padding=True, truncation=True, max_length=128).to(dev)
-                    _, _, zq = anet(aenc)
+                    zq = anet.anchors(anet.h(aenc)) if kind == "st" else anet(aenc)[2]
                     sims = (torch.real(zq[0] @ E_anc.conj().t()) * anet.scale.exp()).max(0).values
             else:
                 emb, st, qpre = anchor
