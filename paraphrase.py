@@ -18,7 +18,8 @@ SYS = ("You rewrite biomedical search questions the way a real researcher or cli
 p = argparse.ArgumentParser(); p.add_argument("--split", default="val"); p.add_argument("--model", default="Qwen/Qwen2.5-7B-Instruct")
 p.add_argument("--batch", type=int, default=48); p.add_argument("--limit", type=int, default=0); p.add_argument("--seed", type=int, default=0); p.add_argument("--out", default=None)
 p.add_argument("--dtype", default="bf16", choices=["bf16", "fp16"], help="fp16 for Pascal cards")
-p.add_argument("--style", default="natural", choices=["natural", "terse"], help="terse = clinician's search-box shorthand: abbreviations, dropped function words, descriptions instead of some names")
+p.add_argument("--style", default="natural", choices=["natural", "terse", "terse2"], help="terse = clinician's search-box shorthand; terse2 = the SAME intent under a differently worded prompt, for a held-out evaluation style (P12)")
+p.add_argument("--trust-remote-code", action="store_true", help="for instruct models that ship their own modelling code")
 a = p.parse_args()
 assert a.split in ("train", "val")
 if a.style == "terse":
@@ -27,9 +28,18 @@ if a.style == "terse":
            "description in place of a name (e.g. 'low potassium' instead of 'hypokalemia'). Keep exactly the same meaning: every "
            "constraint stays, none is added, and the kind of thing asked for does not change. Write in English only. Output only the "
            "rewritten query, nothing else.")
+if a.style == "terse2":
+    # P12: same intent as `terse`, deliberately different wording and different examples, so that a
+    # proxy generated with it does not share the training paraphrases' phrasing habits.
+    SYS = ("Compress each question into the few words someone would actually type into a medical search box. "
+           "Drop articles, verbs and politeness. Prefer standard clinical short forms where one exists. Sometimes "
+           "put a plain-language description where a technical name was. Every constraint in the original must still "
+           "be recoverable from your output, nothing may be added, and the type of thing being asked for must stay the "
+           "same. English only. Never answer the question — only compress it. Return the compressed query alone.")
 torch.manual_seed(a.seed)
-tok = AutoTokenizer.from_pretrained(a.model); tok.padding_side = "left"
-m = AutoModelForCausalLM.from_pretrained(a.model, dtype=(torch.bfloat16 if a.dtype == "bf16" else torch.float16)).cuda().eval()
+tok = AutoTokenizer.from_pretrained(a.model, trust_remote_code=a.trust_remote_code); tok.padding_side = "left"
+if tok.pad_token is None: tok.pad_token = tok.eos_token
+m = AutoModelForCausalLM.from_pretrained(a.model, dtype=(torch.bfloat16 if a.dtype == "bf16" else torch.float16), trust_remote_code=a.trust_remote_code).cuda().eval()
 qa = load_qa("prime"); idx = qa.get_idx_split()[a.split].tolist()
 if a.limit: idx = idx[:a.limit]
 out, t0 = {}, time.time()

@@ -1539,3 +1539,32 @@ generate the evaluation proxy with a different prompt or a different model from 
 trained the component, so that a gain means style-general robustness rather than dialect matching. A
 terse number measured that way would be worth something as evidence about humans; the numbers in P10
 and P11 are worth less than they look, and are recorded here as such.
+
+## P12 pre-registration (2026-09-08, before any run) — hold out the STYLE, not only the questions
+The caveat recorded above: every terse number so far trains on one generator's shorthand and is
+graded on the same generator's shorthand (Qwen2.5-7B-Instruct, --style terse, one prompt), so part of
+P11's +0.62 is dialect matching rather than robustness, and the same is true of the whole
+paraphrased-val column since P2. P4 is the precedent for what that costs: +2.1 on val, −5.1 on human.
+This builds an evaluation proxy whose style NO component has been trained on, and re-runs the two
+claims that were made from terse numbers.
+Held-out proxy (data/para_val_terse_b.json): the same compression intent under a DIFFERENT MODEL
+FAMILY and a DIFFERENT PROMPT — microsoft/Phi-3.5-mini-instruct (3.8B, ungated, different
+pretraining lineage from Qwen) with paraphrase.py --style terse2, a prompt rewritten from scratch
+with different instructions and different examples. Both axes move at once on purpose: the goal is
+maximum style independence, not attribution between model and prompt.
+Quality check before any arm is scored, the same one P10 step 1 ran: median length, and the share of
+questions whose text contains one of their own answer names (the plain-val baseline is 4.6%). If the
+held-out proxy is degenerate — for instance if the model answers instead of compressing at a much
+higher rate than Qwen did — that is reported and the proxy is not used.
+Arms re-scored on the held-out style, each with its own reranker, nothing refit: P3, P8, P11, and
+the P2-era Qwen-7B pipeline (which needs its own llm_parse pass over the new proxy).
+DECISION RULE, fixed before running: an effect measured on the original terse proxy counts as
+STYLE-GENERAL only if, on the held-out proxy, it keeps its SIGN and at least HALF its magnitude.
+Applied to the two claims made today:
+  * P11's terse advantage over P8 (+0.62) must remain at least +0.31 and positive.
+  * The Qwen-7B pipeline's terse deficit against P8 (−2.46) must remain at most −1.23 and negative.
+Whatever the outcome, the P10 and P11 result blocks are annotated with what survived. If the two
+proxies disagree in sign on either claim, the honest conclusion is that neither proxy supports a
+statement about human phrasing, and that is what will be written.
+READS: val only (the proxy is generated from val question text, which development already reads).
+No read of test, test-0.1 or human_generated_eval. Box: vast.ai 50261550.
