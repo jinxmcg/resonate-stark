@@ -1187,3 +1187,47 @@ A' + B' 437.1M at d=256 (from 712.1M).
 READS: train (step 1, the retrievals and the reranker fit) and val (step 2, the decision). No read of
 test / test-0.1 / human_generated_eval under any outcome. Runs on the rented RTX 5090 (vast.ai
 50261550, torch 2.11.0+cu128) only; the 1080 Ti is not used.
+
+### P8 RESULT (2026-09-08 13:40-13:55 UTC, vast.ai 50261550, RTX 5090; scripts/p8_box.sh + scripts/p8_step2.sh): BOTH CANDIDATES ADMISSIBLE — 712.1M -> 453.8M parameters
+Step 1, choosing d on train (text ranker alone, same encoder, same questions):
+| d   | train Hit@1 / Hit@5 / R@20 / MRR | vs 768        | document-matrix parameters |
+| 768 | 24.52 / 48.47 / 55.91 / 35.65 | —             | 99.4M |
+| 384 | 24.57 / 48.31 / 55.76 / 35.63 | +0.05 / −0.15 | 50.0M (49.7M + 0.3M projection) |
+| 256 | 24.26 / 47.71 / 55.19 / 35.28 | −0.26 / −0.72 | 33.3M |
+| 128 | 22.40 / 45.57 / 53.27 / 33.24 | −2.12 / −2.64 | 16.7M |
+The rule (smallest d within 0.3 Hit@1 AND 0.5 Recall@20 of 768) selects d=384: d=256 passes on Hit@1
+(−0.26) and misses on Recall@20 by 0.22 beyond the allowance. Applied as written. Noted for later: a
+Recall@20 allowance of 0.75 would have taken d=256 and another 16.7M; the energy kept is 0.9889 at
+384 and 0.9709 at 256.
+
+Step 2, one val read (reranker refit out of fold for A'; P3's row is the control reproduced from
+scratch on this box under P7 step 2):
+| candidate | parameters | plain Hit@1 / Hit@5 / R@20 / MRR | paraphrased Hit@1 / Hit@5 / R@20 / MRR |
+| P3        | 712.1M | 42.26 / 68.32 / 75.48 / 53.93 | 39.71 / 63.94 / 71.80 / 51.09 |
+| A'        | 503.2M | 42.48 / 67.92 / 74.72 / 53.81 | 39.49 / 62.78 / 71.07 / 50.55 |
+| A' + B'   | 453.8M | 42.44 / 67.69 / 74.57 / 53.74 | 39.49 / 63.05 / 70.87 / 50.51 |
+Against P3 on the BAR's metric: A' +0.22 plain / −0.22 paraphrased; A'+B' +0.18 / −0.22. Both are
+inside the 0.5 allowance on both wordings, so both are ADMISSIBLE, and the rule adopts the one with
+the FEWEST PARAMETERS: **A' + B' — 453.8M, −36.3% of the pipeline, with plain Hit@1 slightly ABOVE
+P3 and paraphrased 0.22 below.**
+Stated plainly because the bar did not govern them: Hit@5 and Recall@20 do fall — plain −0.63 and
+−0.91, paraphrased −0.89 and −0.93. A Recall@20 clause at the same 0.5 allowance would have failed
+both candidates. The bar was pre-registered on Hit@1 alone and is applied as written; anyone reading
+this should weigh the Recall@20 drop themselves.
+On the relational path alone A' costs −0.4 plain / −0.6 paraphrased Hit@1 (26.37 / 22.13 against
+P3's 26.8 / 22.7), with the fallback firing on 112 / 2,241 plain and 170 / 2,241 paraphrased
+questions; the reranker absorbs it, and on plain wording more than absorbs it. This is the lever P7's
+A got wrong: the parser's anchor head is trained to point at the entity a question MENTIONS, which is
+what a fallback anchor resolver has to do, whereas bge_ft2 is trained to point at the ANSWER.
+The rank-384 document matrix costs almost nothing on top: text ranker alone on val 21.55 / 43.06 /
+50.36 / 31.67 plain against the full 768-d ranker's 21.9 / 43.0 / 50.6 / 31.9.
+
+P8 PIPELINE (adopted): latent parser lp_p3 (also serving anchors, --anchor lp), bge_ft2 text ranker
+over the rank-384 document matrix, p_joint text-to-latent, both entity tables, reranker
+data/rerank_p8A_lp_ancf_bgeft2_pjoint_aug_oof.json. Three encoders instead of four, one document
+matrix instead of two. No component was retrained. Nothing is submitted; P3 remains the filed
+candidate until a decision says otherwise.
+Remaining ladder from 453.8M: one trunk with three heads (−218.7M, needs training and a dedicated
+anchor head so it does not re-create P7 lever A's conflict), distillation to a small trunk (−76M),
+and the entity tables (74.6M, of which lever C's second table is −37.3M and missed P7's bar by 0.08).
+fp16 / int8 remain available as a byte-level 2-4x on top of whatever the parameter count ends at.
