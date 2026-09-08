@@ -1068,3 +1068,32 @@ Two readings, both worth keeping:
   question MENTIONS than the un-fine-tuned bge, which is a generic semantic matcher. The 609 MB is
   therefore a real trade, not a free one, and step 2 measures both C and AC so the trade can be made
   on full-pipeline numbers rather than on the relational path alone.
+
+### P7 step 2 pre-registration (2026-09-08, written before the run) — the two candidates in the FULL pipeline, on val
+Step 1's bar was met, so the two size-reducing configurations go through the whole P3 chain and are
+decided on val. Configurations (nothing else changes — no retraining, no new component, no LLM):
+  ref  bge anchors + p_k12b4_50k table   = P3 as it stands (2.34 GB), re-run here as a control:
+       it must reproduce the recorded 42.26 / 68.32 / 75.48 / 53.93 on plain val with the EXISTING
+       reranker (data/rerank_lp_ancf_bgeft2_pjoint_aug_oof.json); if it does not, the step stops.
+  C    bge anchors + p_joint table       (2.20 GB, −142 MB: one table instead of two)
+  AC   bge_ft2 anchors + p_joint table   (1.59 GB, −751 MB: one table, and the anchor fallback
+                                          reuses the text ranker's encoder and doc matrix)
+Chain per candidate, identical to scripts/lp_pipe_chain.sh: retrieve train plain and paraphrased
+with the OUT-OF-FOLD lp parses (data/lparse_train_oof{,_para}.json) and --dump-feats; retrieve val
+plain and paraphrased (data/lparse_val{,_para}.json); refit the reranker on those out-of-fold
+features (rerank.py --text-tag bgeft2 --train-text-tag bgeft2oof --t2l-tag pjoint --train-t2l-tag
+pjointoof, augmented with the paraphrased train groups, per-type weights, save-tag _oof); score val
+plain and paraphrased through predict.py --score.
+FIXED, not tuned per candidate: the RRF weight stays w = 0.45 (data/fusion_bgeft2.json, chosen on
+train for P3). Re-picking it per configuration would both overwrite a P3 artefact and add a tuned
+degree of freedom to a comparison that is about size; it is deliberately left alone and disclosed.
+The text ranker, the text-to-latent rankings and all five out-of-fold folds are the P3 ones,
+unchanged by either lever.
+DECISION RULE, fixed before the run: a candidate is admissible if its val Hit@1 is not more than
+0.5 below P3's on EITHER wording (P3: 42.3 plain, 39.7 paraphrased). Among the admissible ones the
+SMALLEST pipeline wins (AC < C < P3) — this step is about size, so a candidate is not preferred for
+scoring higher, only rejected for scoring materially lower. If both fail, P3 stands and the size
+work moves to the levers that do not touch the anchors (fp16 storage, doc-matrix compression).
+READS: `train` (retrievals and the reranker fit) and `val` (the decision). No read of test,
+test-0.1 or human_generated_eval under any outcome. Same disclosed deviation: vast.ai 50261550,
+RTX 5090, torch 2.11.0+cu128.
