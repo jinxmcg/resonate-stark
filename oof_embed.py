@@ -8,7 +8,8 @@ import stark_shim  # noqa
 from stark_qa import load_qa
 from sentence_transformers import SentenceTransformer, InputExample, losses
 from torch.utils.data import DataLoader
-p = argparse.ArgumentParser(); p.add_argument("--fold", required=True); p.add_argument("--extra", default=None); p.add_argument("--extra2", default=None); p.add_argument("--epochs", type=int, default=2); p.add_argument("--tag", default="bgeft2"); a = p.parse_args()
+p = argparse.ArgumentParser(); p.add_argument("--fold", required=True); p.add_argument("--extra", default=None); p.add_argument("--extra2", default=None); p.add_argument("--epochs", type=int, default=2); p.add_argument("--tag", default="bgeft2"); p.add_argument("--base", default="BAAI/bge-base-en-v1.5", help="P14: the encoder to fine-tune")
+a = p.parse_args()
 K, k = (int(x) for x in a.fold.split(":")); random.seed(0); torch.manual_seed(0)
 QPRE = "Represent this sentence for searching relevant passages: "
 docs = [json.loads(l) for l in open("data/docs.jsonl")]; dtext = {d["id"]: d["text"] for d in docs}
@@ -20,7 +21,7 @@ for pos, i in enumerate(tr):
     for qq in [q] + ([EXTRA[str(int(qid))]] if str(int(qid)) in EXTRA else []) + ([EXTRA2[str(int(qid))]] if str(int(qid)) in EXTRA2 else []):
         for a_ in ans[:3]: ex.append(InputExample(texts=[QPRE + qq, dtext[a_][:1500]]))
 random.shuffle(ex); print("fold", k, "pairs", len(ex), "held", len(held), flush=True)
-m = SentenceTransformer("BAAI/bge-base-en-v1.5", device="cuda"); m.max_seq_length = 384
+m = SentenceTransformer(a.base, device="cuda"); m.max_seq_length = 384
 t0 = time.time(); m.fit(train_objectives=[(DataLoader(ex, shuffle=True, batch_size=48), losses.MultipleNegativesRankingLoss(m))], epochs=a.epochs, warmup_steps=100, show_progress_bar=False)
 print("fine-tuned", round(time.time() - t0), "s", flush=True); m.max_seq_length = 512
 D = torch.from_numpy(m.encode([d["text"][:3000] for d in docs], batch_size=128, convert_to_numpy=True, normalize_embeddings=True, show_progress_bar=False)).cuda()

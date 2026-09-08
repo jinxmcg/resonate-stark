@@ -8,7 +8,9 @@ from stark_qa import load_qa
 from sentence_transformers import SentenceTransformer, InputExample, losses
 from torch.utils.data import DataLoader
 ap = argparse.ArgumentParser(); ap.add_argument("--extra-queries", default=None, help="json {query_id: text}: paraphrased train questions, added as extra (query, answer) pairs")
-ap.add_argument("--out", default="models/bge_ft"); ap.add_argument("--epochs", type=int, default=2); ap.add_argument("--extra2", default=None); A = ap.parse_args()
+ap.add_argument("--out", default="models/bge_ft"); ap.add_argument("--epochs", type=int, default=2); ap.add_argument("--extra2", default=None)
+ap.add_argument("--base", default="BAAI/bge-base-en-v1.5", help="P14: the encoder to fine-tune (a biomedical one, for instance)")
+A = ap.parse_args()
 random.seed(0); torch.manual_seed(0)
 docs = {json.loads(l)["id"]: json.loads(l)["text"][:1500] for l in open("data/docs.jsonl")}
 qa = load_qa("prime"); tr = qa.get_idx_split()["train"].tolist()
@@ -21,7 +23,7 @@ for i in tr:
         for a_ in ans[:3]:
             ex.append(InputExample(texts=[QPRE + qq, docs[a_]]))
 random.shuffle(ex); print("pairs", len(ex), flush=True)
-m = SentenceTransformer("BAAI/bge-base-en-v1.5", device="cuda"); m.max_seq_length = 384
+m = SentenceTransformer(A.base, device="cuda"); m.max_seq_length = 384
 dl = DataLoader(ex, shuffle=True, batch_size=48)
 loss = losses.MultipleNegativesRankingLoss(m)
 t0 = time.time(); m.fit(train_objectives=[(dl, loss)], epochs=A.epochs, warmup_steps=100, show_progress_bar=False)

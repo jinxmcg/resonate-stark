@@ -1840,3 +1840,21 @@ augmentation should always use several generators. If it does not, the parser is
 rather than a register, and every shorthand number in this line — P11's included — should be read as
 an upper bound.
 READS: train (generation and fitting) and val (the decision). No test or human read. Box 50270859.
+
+## P14 STEP 2 pre-registration (2026-09-08, before the run) — the fine-tuned biomedical embedder
+P14's screen licensed this as a GAMBLE, not a finding: stock PubMedBERT retains 90.2% of its own
+plain accuracy across the three shorthand registers against stock bge's 86.2% (clearing the 3-point
+bar), but it is 2.46 Hit@1 BELOW bge on plain and below it everywhere in absolute terms, so part of
+that retention may be a floor effect. Only a fine-tuned comparison settles it.
+Design, identical to how bge_ft2 was built so that only the base encoder differs: fine-tune
+NeuML/pubmedbert-base-embeddings on the train question -> answer-document pairs (finetune_embed.py
+--base, plain + para_train.json, MultipleNegativesRankingLoss, batch 48, 2 epochs, seed 0), then the
+five out-of-fold folds (oof_embed.py --base --fold 5:k) so the reranker's train text features stay
+out of fold, then the reranker refit, then val scored in plain and the three shorthand registers.
+Everything else in the pipeline is P3's and untouched; the text ranker is the only thing that moves.
+BAR, fixed before running: the shorthand mean (terse A, B, C) must improve by at least 0.5 Hit@1 over
+P3's 34.24 AND plain must not fall more than 0.5 below P3's three-seed mean of 42.79. The premise of
+P14 is shorthand robustness, so the shorthand half is what must gain; a model that merely matches bge
+everywhere has not earned a swap. If it fails, the recorded conclusion is that stock retention was a
+floor effect and domain pretraining does not survive fine-tuning on this corpus.
+READS: train (fitting) and val (the decision). No test or human read. Box: vast.ai 50270859.
