@@ -1486,3 +1486,34 @@ benefit is 4.5x more concentrated on collision questions than on the rest (+2.10
 P6 failed because it averaged a fix for 15% of questions over 100% of them. A candidate that acted
 ONLY on collisions, or a reranker with a collision indicator interacted with rev_raw, is the shape
 this evidence points to — untried, and it would need its own registration.
+
+### P11 RESULT (2026-09-08 15:20-15:33 UTC, vast.ai 50261550; scripts/p11.sh): NEGATIVE by the bar — the best terse score so far, bought with plain
+Labels 18,486 rows (+6,162 terse over lp_p3's 12,324), six parser trainings (~1.5 min each), five
+out-of-fold predictions, five retrievals, reranker refit, three scored val wordings.
+First attempt failed cleanly and was rerun: latent_parser.py --train loads data/llmparse_train.json
+unconditionally (before the label-cache check, although the cache makes it unused) and that file had
+not been shipped to the box, so all six trainings raised FileNotFoundError, every later step failed
+on its missing input, and the script — which had no error checking — still printed P11_DONE. No
+partial artefact was written and nothing was contaminated. The script now aborts on a missing
+checkpoint after each training; recorded because a silent chain of no-ops that ends in DONE is the
+most dangerous shape a run can have.
+
+Val Hit@1 / Hit@5 / R@20 / MRR, against the P8 pipeline the parser was dropped into:
+| arm | plain | natural paraphrase | terse |
+| P8  | 42.44 / 67.69 / 74.57 / 53.74 | 39.49 / 63.05 / 70.87 / 50.51 | 33.96 / 54.35 / 61.99 / 43.35 |
+| P11 | 41.95 / 67.96 / 74.70 / 53.69 | 39.45 / 63.41 / 70.92 / 50.58 | **34.58 / 55.78 / 63.81 / 44.57** |
+Against P8: plain −0.49, natural −0.04, terse **+0.62** (Hit@5 +1.43, Recall@20 +1.82, MRR +1.22).
+BAR (terse at least +1.0 over P8 AND plain no more than 0.3 below): FAILS on both halves — terse
++0.62 falls 0.38 short, plain −0.49 is 0.19 past the allowance. Not adopted.
+On the relational path alone the parser clearly did learn the wording: val terse 22.27 Hit@1, ABOVE
+its own natural-paraphrase 22.13, an ordering no previous parser has produced (terse has been the
+harder wording for every arm all day). The gain is real at the parse stage and only partly survives
+the full pipeline, which is lever C's pattern one component to the left: there the embedder's terse
+gain died in the reranker, here the parser's mostly does.
+34.58 is nevertheless the highest terse number measured (P3 34.09, P8 33.96), and the trade is
+legible: about half a point of plain for about six tenths of terse. That is a robustness/accuracy
+exchange, not a win, and on a 98-question human set where one question is 1.02 points it is not the
+kind of change that would move the read reliably.
+Follow-ons this points at, neither run nor registered: weight the terse rows below the plain ones
+instead of 1:1, or add terse only to the ANCHOR loss (the head P8 made load-bearing) rather than to
+the answer-type and operator heads as well, so the trade is taken only where the failure is.

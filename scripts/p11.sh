@@ -28,10 +28,12 @@ PY
 st "2. parser trained on plain + natural + terse (full, then 5 folds)"
 $PY latent_parser.py --train --tag lp_p4t --labels data/lp_labels_terse.json > logs/p11_train.log 2>&1
 grep -E "weak labels|anchor|floor" logs/p11_train.log | tail -2 | sed "s/^/    /" >> logs/p11_status.log
+if [ ! -f models/lp_p4t.pt ]; then st "ABORT: the parser did not train — $(tail -1 logs/p11_train.log | cut -c1-120)"; exit 1; fi
 for k in 0 1 2 3 4; do
   $PY latent_parser.py --train --tag lp_p4t_f$k --fold 5:$k --labels data/lp_labels_terse.json > logs/p11_f$k.log 2>&1
   $PY latent_parser.py --predict train --tag lp_p4t_f$k --fold 5:$k --out data/oof/lparse_train_p4t_f$k.json > logs/p11_f${k}_p.log 2>&1
   $PY latent_parser.py --predict train --tag lp_p4t_f$k --fold 5:$k --queries data/para_train.json --out data/oof/lparse_train_p4t_f${k}_para.json > logs/p11_f${k}_pp.log 2>&1
+  if [ ! -f models/lp_p4t_f$k.pt ]; then st "ABORT: fold $k did not train — $(tail -1 logs/p11_f$k.log | cut -c1-120)"; exit 1; fi
   st "  fold $k done"
 done
 $PY - <<'PY'
