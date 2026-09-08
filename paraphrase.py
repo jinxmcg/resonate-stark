@@ -45,8 +45,11 @@ if a.limit: idx = idx[:a.limit]
 out, t0 = {}, time.time()
 for b in range(0, len(idx), a.batch):
     chunk = idx[b:b + a.batch]
-    prompts = [tok.apply_chat_template([{"role": "system", "content": SYS}, {"role": "user", "content": qa[i][0]}],
-                                       tokenize=False, add_generation_prompt=True) for i in chunk]
+    if getattr(tok, "chat_template", None):
+        prompts = [tok.apply_chat_template([{"role": "system", "content": SYS}, {"role": "user", "content": qa[i][0]}],
+                                           tokenize=False, add_generation_prompt=True) for i in chunk]
+    else:   # models that ship no chat template (several medical fine-tunes): a plain instruction prompt
+        prompts = [f"{SYS}\n\nQuestion: {qa[i][0]}\nRewritten query:" for i in chunk]
     enc = tok(prompts, return_tensors="pt", padding=True).to("cuda")
     with torch.no_grad():
         gen = m.generate(**enc, max_new_tokens=96, do_sample=True, temperature=0.9, top_p=0.95, pad_token_id=tok.eos_token_id)

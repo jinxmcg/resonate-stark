@@ -1605,3 +1605,38 @@ is 0.71 ahead — outside it. Collecting every wording measured:
 P8 leads only on template wording, and its deficit GROWS the further the phrasing moves from the
 training distribution. P10's "called equal on terse, so P8 wins on parameters" rested on a single
 proxy and does not survive a second one. P8's advantage is parameter count alone.
+
+## P13 pre-registration (2026-09-08, before any run) — is P11's shorthand advantage real, and does it hold in a medical register?
+The user's priority is the HUMAN set. P12 established that P11's advantage over P8 is style-general
+(+0.62 on the Qwen proxy, +0.93 on the held-out Phi proxy) and, unplanned, that P3 beats P8 on both
+shorthand styles, so P8 is out of the filing question and the live comparison is P11 against P3:
+  P11 - P3:  plain −0.31 | natural −0.26 | terse A +0.49 | terse B +0.22 | parameters 453.8M vs 712.1M
+Two reasons that is not yet enough to spend a fifth read on:
+ 1. P11 is ONE training run and its edge is +0.22 to +0.49. This project has measured ~0.3 Hit@1 of
+    seed variance on a learned component (P4's selector, three seeds). The effect and the noise are
+    the same size, and nobody has looked.
+ 2. Both proxies are general-purpose models imitating clinical shorthand. A medical-register model
+    writes the abbreviations a clinician actually uses, which is a different and more realistic test.
+Step 1 — a third proxy, medical register (data/para_val_terse_c.json): aaditya/Llama3-OpenBioLLM-8B
+(Llama-3 lineage, medical tuning, 8B — a third family and a third size) under the same terse2 prompt.
+paraphrase.py now falls back to a plain instruction prompt for models that ship no chat template.
+Same quality check as P10 and P12 before any arm is scored: median length, and the share of questions
+containing one of their own answer names (plain-val baseline 4.6%, Qwen 5.6%, Phi 5.2%). A medical
+model TUNED TO ANSWER medical questions is the obvious failure mode here; if its leakage rate is
+materially above the other two, the proxy is reported and NOT used.
+Step 2 — seed variance. Retrain the P11 parser at seeds 1 and 2 (identical labels and
+hyperparameters, latent_parser.py --seed). The out-of-fold fold-parsers and the reranker stay at
+seed 0 so that only the val-side parser moves; that mismatch exists identically at every seed.
+Step 3 — P3 and the three P11 seeds on four wordings: plain, terse A (Qwen), terse B (Phi),
+terse C (OpenBioLLM). Each arm keeps its own existing reranker; nothing is refit.
+BAR, fixed before running: P11 is proposed for a fifth read only if
+  (a) its advantage over P3 averaged across the three shorthand styles is POSITIVE AT EVERY SEED, and
+  (b) that mean advantage EXCEEDS the standard deviation across the three seeds, and
+  (c) its plain Hit@1 at the seed mean is no more than 0.5 below P3's 42.26.
+If (a) or (b) fails, the advantage is within training noise, P11 is recorded as not distinguishable
+from P3, and P3 is filed. Note asymmetry, disclosed: P3's own parser seed variance has never been
+measured, so the comparison gives P3 the benefit of a single lucky or unlucky draw; this bar is
+therefore harder on P11 than on P3, deliberately.
+READS: val only. NO read of test, test-0.1 or human_generated_eval. Even if the bar passes, the
+fifth read is a SEPARATE registration and requires explicit authorisation — passing here only makes
+P11 a candidate worth proposing. Box: vast.ai 50261550.
