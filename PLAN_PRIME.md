@@ -1441,3 +1441,48 @@ questions of 2,241. Recorded rather than filtered: filtering would change the qu
 arm to remove an effect of ~22 questions, and all three arms share the same text ranker so the
 differential between them is smaller still. Terse numbers carry a ~1pp optimistic bias from this
 cause, disclosed here.
+
+### P10 RESULT (2026-09-08 14:58-15:15 UTC, vast.ai 50261550; scripts/p10_step23.sh): the 7B COLLAPSES on human-like wording; the reverse features localise to collisions
+Step 2 — three candidates x three wordings, val Hit@1 / Hit@5 / R@20 / MRR, each with its OWN
+existing reranker, nothing refit:
+| arm | parameters | plain | natural paraphrase | TERSE (the human proxy) |
+| P3  | 712.1M | 42.26 / 68.32 / 75.48 / 53.93 | 39.71 / 63.94 / 71.80 / 51.09 | 34.09 / 54.89 / 62.47 / 43.75 |
+| P8  | 453.8M | 42.44 / 67.69 / 74.57 / 53.74 | 39.49 / 63.05 / 70.87 / 50.51 | 33.96 / 54.35 / 61.99 / 43.35 |
+| LLM (P2-era + Qwen2.5-7B) | 712.1M + 7B | **43.78** / 68.01 / 75.80 / 55.07 | **41.05** / 63.99 / 72.26 / 51.83 | **31.50** / 51.14 / 60.26 / 40.91 |
+The 7B is the best arm on plain (+1.34 over P8) and on natural paraphrases (+1.56) — and the WORST
+on terse, 2.46 BELOW P8 and 2.59 below P3. Its decision rule (>= 1.0 over P8 on terse, losing no
+more than 0.5 on plain) fails by a wide margin and in the opposite direction. The no-LLM pipeline is
+now confirmed on human-like wording, not just accepted as a -2.2 concession.
+This is exactly what lever 2c(b) recorded and nobody followed up: "the LLM parser adds COVERAGE
+rather than phrasing robustness", 96.2% -> 100.0%. Since P8 the pipeline reaches 100% coverage
+without it, so the -2.2 was stale; and where the 7B has to READ shorthand rather than fill coverage
+gaps it degrades faster than the parser it replaced (12 of 2,241 terse questions unparsable).
+Recorded so the paper's "two honest pipelines" line can be corrected: the max-score pipeline is max
+score ON SYNTHESIZED WORDING ONLY.
+P3 vs P8 on terse: 34.09 vs 33.96, a gap of 0.13, inside the pre-registered 0.3 band, so they are
+called equal and P8 wins on parameters (453.8M vs 712.1M). Context for the size: the text ranker
+alone falls from 21.9 Hit@1 on plain to 15.13 on terse, so every arm is working much harder here.
+
+Step 3 — the reverse-operator features where P5 said the collision fix must come from. A val
+question is a COLLISION question if its parse resolves one name string to two or more entity ids:
+333 of 2,241 (14.9%). Relational-shortlist reranker fit on train (8,033 groups, plain + paraphrased),
+base vs + the four rev columns, scored per subset through predict.py --qids:
+| wording | subset      | base  | + rev | delta |
+| plain   | collision   | 22.82 | 24.92 | **+2.10** |
+| plain   | remainder   | 27.67 | 28.14 | +0.47 |
+| terse   | collision   | 18.02 | 18.62 | +0.60 |
+| terse   | remainder   | 21.75 | 21.80 | +0.05 |
+Learned weights confirm the features are used: rev_raw_max +0.636, rev_raw_mean +0.609 (rev_nov
+again near zero: -0.278 / +0.018, as in P6).
+BAR AMBIGUITY, disclosed: the pre-registration said "gain >= 2.0 Hit@1 on the collision subset while
+losing no more than 0.3 on the remainder" WITHOUT naming the wording. On plain it passes (+2.10,
+remainder +0.47). On terse it does not (+0.60). Under the conservative reading — both wordings, terse
+binding, as every other bar in this line has been — P10 step 3 FAILS and the rev features are not
+carried forward. That is the reading taken. The imprecision was mine and is recorded rather than
+resolved in the favourable direction.
+What is nonetheless established: P5's prediction was right in mechanism. rev_raw is "the readout over
+the candidate's neighbourhood — which candidate has the relation the question asks for", and its
+benefit is 4.5x more concentrated on collision questions than on the rest (+2.10 vs +0.47 on plain).
+P6 failed because it averaged a fix for 15% of questions over 100% of them. A candidate that acted
+ONLY on collisions, or a reranker with a collision indicator interacted with rev_raw, is the shape
+this evidence points to — untried, and it would need its own registration.
