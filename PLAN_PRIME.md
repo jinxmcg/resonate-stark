@@ -1757,3 +1757,42 @@ reported as the parameter result and is not a filing candidate.
 This is the same conclusion the decision rule of 2026-09-07 would reach — publish the best model and
 architecture, not the best score — arrived at from the other direction: the score difference is not
 measurable, so only the architecture argument remains, and it is made in the paper.
+
+### P14 RESULT (2026-09-08 16:52-16:55 UTC, vast.ai 50209059; scripts/p14.sh): PubMedBERT passes on retention, and the bar has a floor-effect confound
+Stock against stock, no fine-tuning, each model embedding the same 129,375 documents; val Hit@1:
+| model                     | plain | terse A | terse B | terse C | shorthand retention |
+| BAAI/bge-base (incumbent) | 10.49 | 8.57 | 9.42 | 9.15 | 86.2% |
+| NeuML/pubmedbert          |  8.03 | 7.10 | 7.41 | 7.23 | **90.2%** |
+| abhinand/MedEmbed-base    |  9.86 | 8.34 | 8.48 | 8.88 | 86.9% |
+BAR (a biomedical model must retain at least 3 percentage points more of its own plain accuracy):
+PubMedBERT PASSES at +4.0, MedEmbed fails at +0.7. Domain pretraining does buy robustness to clinical
+register — the first direct evidence of it in this line.
+CONFOUND, stated because the bar does not capture it: PubMedBERT is worse in ABSOLUTE terms
+everywhere — 2.46 below bge on plain and below it on all three shorthand registers. A weaker
+retriever has less to lose, so part of that retention edge may be a floor effect rather than
+robustness. The bar was pre-registered on retention precisely because bge_ft2's train-question
+fine-tuning confounds absolutes, but the honest reading is that P14 licenses the fine-tuning budget
+as a GAMBLE, not as a finding: a fine-tuned PubMedBERT must close a 2.46-point plain gap AND keep the
+retention edge, and only that comparison settles it. Recorded as such; the fine-tune is not run here.
+
+### P15 RESULT (2026-09-08 16:49-17:05 UTC, vast.ai 50270859; scripts/p15.sh): BOTH WEIGHTINGS PASS — the shared trunk is back on the table
+Fold 0 of train, each head against the dedicated model that excluded the same fold:
+| trunk                | text head (dedicated 22.30) | parser head, relational (dedicated 26.36) |
+| P9, all losses 1x    | 20.19  (**−2.11**, failed)  | 26.85  (+0.49) |
+| P15 w3, text loss 3x | **21.33  (−0.97)**          | **27.01  (+0.65)** |
+| P15 w6, text loss 6x | 21.25  (−1.05)              | 26.28  (−0.08) |
+BAR (no head more than 2.0 below its dedicated counterpart): BOTH PASS. w3 is the better setting on
+both heads at once — it more than halves P9's text deficit AND slightly improves on P9's parser gain,
+so the two objectives are not as irreconcilable as P9 suggested; they were simply mis-weighted. Three
+of the five losses pull toward the mention, and giving the answer-pointing task three times the
+weight restores the balance. w6 buys nothing further and costs the parser its gain, so the useful
+range is narrow and w3 sits in it.
+The t2l head is reported for information only (w3 45.17, w6 45.90) and is NOT part of the bar: it
+scores against a table the shared trunk trained on while its dedicated counterpart did not — the
+contamination that voided P9's t2l row, and no fold-matched table exists because joint_train.py's
+fold runs return before saving a checkpoint. The full build's val read is where t2l gets judged.
+CONSEQUENCE: the shared trunk is viable at w3, which puts −218.7M back within reach (three 110M
+encoders collapse to one 110.4M trunk, taking the pipeline from 453.8M to roughly 235M). The full
+build — five out-of-fold trunks plus a full-train trunk, the corpus re-embedded through it, the
+rank-384 projection refit, every ranking regenerated, the reranker refit out of fold, and ONE val
+read — is a separate registration and is not run here.
