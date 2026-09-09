@@ -1,7 +1,8 @@
 # STaRK leaderboard submission — Prime, all three splits (P3; prepared, not filed)
 
-> **Submission status — 8 September 2026: nothing has been filed for BioKG,
-> WikiKG2, or STaRK-Prime.** Entries are proposed only. **P3 is the selected
+> **Submission status — 9 September 2026: the two ogbl-biokg entries were
+> filed on OGB's form (pending validity check); wikikg2 E is form-ready; nothing
+> has been filed for STaRK-Prime.** The STaRK entry is proposed only. **P3 is the selected
 > candidate** (`PLAN_PRIME.md`, decision rule of 2026-09-07). This document was
 > rewritten from the historical P2 draft; the P2 material it replaced is in git
 > history.
