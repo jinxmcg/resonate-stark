@@ -1,11 +1,16 @@
 # ResonatE on STaRK-Prime: one entity table that answers in graph terms and in language
 
+> **Submission status — 7 September 2026 (confirmed by the user): nothing has
+> been filed for BioKG, WikiKG2, or STaRK-Prime.** Entries are proposed only.
+> P3 is the selected candidate in `PLAN_PRIME.md`. The P2 material below is
+> historical preparation and must be updated before any future filing.
+
 This repository is the STaRK-Prime probe of [ResonatE](https://github.com/jinxmcg/resonate),
 a knowledge-graph embedding with a unit-norm complex entity table and composable relation
 operators. It is separate from the paper's OGB work on purpose: its own numbering (P1, P2),
 its own plan file, its own reads of the test split, all in [`PLAN_PRIME.md`](PLAN_PRIME.md).
 
-**Submitted system: "ResonatE (no llm)".** No generative language model is run when a question is
+**Reported P2 system: "ResonatE (no llm)".** No generative language model is run when a question is
 answered: nothing decodes tokens at query time. What does run is the entity table trained on
 PrimeKG's edges *and* on the training questions, its 36 relation operators, the graph adjacency,
 two 110M transformer encoders (a fine-tuned `bge-base-en-v1.5` text ranker, and the encoder under
@@ -18,15 +23,32 @@ entities for weak labels; it is not needed to run or to reproduce anything here.
 
 Committed reads of the STaRK-Prime test splits: one pipeline, frozen before the read, run once per
 split after a dry run on validation reproduced the development number to four decimals.
-`results_p2/eval_results_*.csv` are the files submitted. Metrics are Hit@1 / Hit@5 / Recall@20 /
+`results_p2/eval_results_*.csv` are the historical P2 prediction files; none has been submitted. Metrics are Hit@1 / Hit@5 / Recall@20 /
 MRR over the whole node set. Baseline rows are the STaRK leaderboard's own
 (https://stark.stanford.edu, fetched from the leaderboard's source on 2026-09-06), i.e. the rows of
-the STaRK paper (Wu et al., NeurIPS D&B 2024) and the AvaTaR paper (Wu et al., NeurIPS 2024). The
+the STaRK paper (Wu et al., NeurIPS D&B 2024) and the AvaTaR paper (Wu et al., NeurIPS 2024), plus
+the later published Prime results that the leaderboard does not carry, each copied from its own
+paper on 2026-09-09: KAR (Xia et al., NAACL 2025, arXiv 2410.13765, Table 2/3), mFAR (Li et al.,
+ICLR 2025, arXiv 2410.20056, Table 8), 4StepFocus (Boer, Koch, Kramer, arXiv 2409.00861, Table 1),
+FocusedRetriever (Boer, Roth, Kramer, arXiv 2505.09246v1, Tables 4/8) and its published successor
+AF-Retriever (Boer, Roth, Kramer, TMLR 2026, arXiv 2505.09246v4, Tables 3/11). The
 "regime" column is our reading of those papers: *zero-shot* = a pretrained retriever with no
 STaRK-specific training; *trained* = fine-tuned or trained on the STaRK train split; *LLM at query
-time* = a generative model runs on each query (reranking, or an agent). Ours is trained on the
+time* = a generative model runs on each query (reranking, an agent, query expansion or Cypher
+generation). Ours is trained on the
 train split (embedder fine-tune, joint table, parser head, reranker) with offline LLM augmentation
 (paraphrases and weak labels from a local 7B model) and no generative model at query time.
+
+**The 10% caveat.** 4StepFocus and FocusedRetriever report only on the 280-question 10% subset of
+the synthesized test split, as do the leaderboard's Claude3 and GPT4 reranker rows (their papers:
+"for methods that use proprietary LLMs, only 10% of synthetic test sets are used"; "in line with
+reporting of other LLM-based methods, we restrict evaluation to 10% of the synthetic test
+questions"). Those rows sit in the 10% table and are compared with our test-0.1 read, never with
+the full-split read. On 280 questions a 95% interval on Hit@1 is about ±6 points, so a gap of 4.6
+points is thirteen questions and is not settled by one read either way. KAR, mFAR and AF-Retriever
+evaluate on the full 2,801-question split and sit in the full table; mFAR reports no human-set
+numbers, and the Boer et al. papers omit Recall@20 on the human set because some human questions
+have more than twenty answers. Bold marks the best published number in each column.
 
 **Synthesized (full), 2,801 questions**
 
@@ -44,7 +66,11 @@ train split (embedder fine-tune, joint table, parser head, reranker) with offlin
 | ColBERTv2 | zero-shot | 11.75 | 23.85 | 25.04 | 17.39 |
 | AvaTaR (claude-3-opus) | LLM at query time, prompts optimised on train | 18.44 | 36.73 | 39.31 | 26.73 |
 | AvaTaR (gpt-4-turbo) | LLM at query time, prompts optimised on train | 20.10 | 39.89 | 42.23 | 29.18 |
-| **ResonatE (no llm)** | trained + offline LLM augmentation | **41.81** | **68.30** | **74.77** | **53.66** |
+| KAR (gpt-4o) | LLM at query time, zero-shot | 30.35 | 49.30 | 50.81 | 39.22 |
+| mFAR (All) | trained, no LLM at query time | 40.9 | 62.8 | 68.3 | 51.2 |
+| AF-Retriever (gpt-oss-120b) | LLM at query time, zero-shot | **46.2** | 63.7 | — | 54.0 |
+| ResonatE (no llm), P2 read | trained + offline LLM augmentation | 41.81 | 68.30 | 74.77 | 53.66 |
+| **ResonatE (no llm), P3 — the entry** | trained + offline LLM augmentation | 43.09 | **68.80** | **75.50** | **54.73** |
 
 **Synthesized (10%), 280 questions**
 
@@ -62,11 +88,15 @@ train split (embedder fine-tune, joint table, parser head, reranker) with offlin
 | ColBERTv2 | zero-shot | 15.00 | 26.07 | 27.78 | 19.98 |
 | Claude3 Reranker | LLM at query time (reranks ada-002 top-20) | 17.79 | 36.90 | 35.57 | 26.27 |
 | GPT4 Reranker | LLM at query time (reranks ada-002 top-20) | 18.28 | 37.28 | 34.05 | 26.55 |
-| **ResonatE (no llm)** | trained + offline LLM augmentation | **41.79** | **71.07** | **75.90** | **54.31** |
+| 4StepFocus (gpt-4o) | LLM at query time, zero-shot; this subset only | 39.3 | 53.2 | 55.9 | 45.8 |
+| FocusedRetriever (Llama 3.3 70B) | LLM at query time, zero-shot; this subset only | **46.4** | 63.9 | 65.5 | 53.7 |
+| ResonatE (no llm), P2 read | trained + offline LLM augmentation | 41.79 | 71.07 | 75.90 | 54.31 |
+| **ResonatE (no llm), P3 — the entry** | trained + offline LLM augmentation | 41.79 | **72.50** | **77.83** | **54.34** |
 
-**Human-generated, 98 questions** (our row with 95% bootstrap confidence intervals over questions;
-the baselines are single numbers from the leaderboard, whose intervals on 98 questions are of the
-same width, so differences of a few points are not significant)
+**Human-generated, 98 questions** (our P2 row with 95% bootstrap confidence intervals over
+questions; the baselines are single numbers from their papers, whose intervals on 98 questions are
+of the same width, so differences of a few points are not significant — differences of twenty
+points are)
 
 | method | regime | Hit@1 | Hit@5 | R@20 | MRR |
 |---|---|---|---|---|---|
@@ -83,11 +113,26 @@ same width, so differences of a few points are not significant)
 | Claude3 Reranker | LLM at query time | 28.57 | 46.94 | 41.61 | 36.32 |
 | GPT4 Reranker | LLM at query time | 28.57 | 44.90 | 41.61 | 34.82 |
 | AvaTaR (gpt-4-turbo) | LLM at query time, prompts optimised on train | 33.03 | 51.37 | 53.34 | 41.00 |
-| **ResonatE (no llm)** | trained + offline LLM augmentation | 30.61 [21.4, 39.8] | 53.06 [42.9, 63.3] | 60.58 [51.6, 69.4] | 41.74 [33.9, 50.3] |
+| KAR (gpt-4o) | LLM at query time, zero-shot | 44.95 | 60.55 | 59.90 | 51.85 |
+| 4StepFocus (gpt-4o) | LLM at query time, zero-shot | 50.5 | 65.5 | — | 57.9 |
+| FocusedRetriever (Llama 3.3 70B) | LLM at query time, zero-shot | **58.8** | 66.0 | — | 62.3 |
+| AF-Retriever (gpt-oss-120b) | LLM at query time, zero-shot | 57.1 | **69.4** | — | **62.7** |
+| ResonatE (no llm), P2 read | trained + offline LLM augmentation | 30.61 [21.4, 39.8] | 53.06 [42.9, 63.3] | 60.58 [51.6, 69.4] | 41.74 [33.9, 50.3] |
+| **ResonatE (no llm), P3 — the entry** | trained + offline LLM augmentation | 28.57 | 53.06 | **61.85** | 40.67 |
 
-Reading the human table honestly: our Hit@1 is 2.4 points below AvaTaR, our Recall@20 is 7 points
-above it, and Hit@5 and MRR are within the interval width. On the two synthesized splits the margin
-over every row is far outside any interval.
+Reading the tables honestly. On the full synthesized split the entry is first on Hit@5, Recall@20
+and MRR and second on Hit@1: AF-Retriever, which generates Cypher queries and reranks with a 120B
+language model at query time, reads 46.2 against our 43.1; mFAR, the strongest row that also runs
+no LLM at query time, is 2.2 below us on Hit@1 and 7.2 below on Recall@20. On the 10% subset the
+same holds against FocusedRetriever (46.4 Hit@1 against our 41.8, with our Hit@5, Recall@20 and MRR
+ahead), inside the interval a 280-question read allows. On the 98 human questions the picture is
+different and the earlier reading of this table ("2.4 points below AvaTaR") is withdrawn: the
+query-time LLM pipelines are far ahead on Hit@1 — FocusedRetriever 58.8, AF-Retriever 57.1,
+4StepFocus 50.5, KAR 45.0 against our 28.6 — and that gap is outside any interval. What survives on
+the human set is Recall@20, where the one row that reports it (KAR, 59.9) is level with ours
+(61.9). The human questions were never used for development and the pipeline's parser is trained
+on synthesized templates; the gap says the parser does not read free phrasing the way an LLM does,
+which is the honest limit of a no-LLM-at-query-time design on this benchmark.
 
 Our first read (P1, tag `p1-frozen`: hand-written parser, off-the-shelf embedder) was 28.7 / 28.2 /
 20.4 Hit@1. Both reads are reported; nothing was tuned after the second. Development used the
@@ -99,7 +144,7 @@ for human phrasing.
 top-100 list and counts an answer outside the top-100 as reciprocal rank 0. The leaderboard scores
 the same CSV with `stark_qa`'s `Evaluator` (top-100 ids with scores −i, every other candidate tied
 below), under which an answer outside the top-100 can only add up to 1/101 by tie order.
-`eval_check.py` runs both on the validation predictions of the submitted pipeline: Hit@1, Hit@5 and
+`eval_check.py` runs both on the validation predictions of the reported P2 pipeline: Hit@1, Hit@5 and
 Recall@20 agree on every query; MRR agrees to four decimals in the mean (0.5307 both), with a
 largest per-query difference of 0.0016 from that tie effect. Rescoring the three committed files
 with the official `Evaluator` gives the same numbers as above to two decimals (test 41.81 / 68.30 /
@@ -147,7 +192,7 @@ weak labels derived from the graph reads questions into the model's query space.
 path alone it scores 25.6 ± 0.6 Hit@1 on synthesized and 22.3 ± 0.4 on human-style wording,
 against 24.9 / 20.9 for a hand-written parser backed by a 7B instruction model. Inside the full
 pipeline the 7B model is worth about two points of Hit@1 and nothing on Hit@5 or Recall@20; the
-submitted system leaves it out.
+reported P2 system leaves it out.
 
 **Where the model does and does not do work, measured.** With the same parser and anchors:
 the exact graph walk alone gives 18.9 Hit@1 on val, ResonatE's operator composition alone 19.0,
@@ -252,7 +297,7 @@ in `scripts/` are the ablations and negative results recorded in `PLAN_PRIME.md`
 ## Protocol
 
 - The test splits were read twice in total: once by P1 (28.7 / 28.2 / 20.4 Hit@1) and once by
-  the submitted P2 pipeline. Both are in `PLAN_PRIME.md` with the pre-registration written before
+  the reported P2 pipeline. Both are in `PLAN_PRIME.md` with the pre-registration written before
   each read. The test splits' answers are used only inside `predict.py --score`; their question
   text is read only to produce predictions.
 - The human-generated set was never used for development; the paraphrase proxy stands in for it.
@@ -266,6 +311,6 @@ in `scripts/` are the ablations and negative results recorded in `PLAN_PRIME.md`
 · `llm_parse.py`, `paraphrase.py` (offline 7B uses) · `finetune_embed.py`, `embed_text2.py` (text)
 · `text2latent.py`, `joint_train.py`, `t2l_rank.py` (language readout) · `latent_parser.py` ·
 `rerank.py`, `predict.py`, `fuse.py` · `oof_embed.py` · `scripts/*.sh` (chains) · `eval_check.py`, `bench.py` (audit) ·
-`results/` (P1 read) · `results_p2/` (submitted files) · `logs/` · `PLAN_PRIME.md` (everything).
+`results/` (P1 read) · `results_p2/` (historical P2 prediction files) · `logs/` · `PLAN_PRIME.md` (everything).
 
 License: MIT. Author: Cristian Malaia, with Claude Fable 5 (Anthropic) as pair programmer.
